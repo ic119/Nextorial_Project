@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 
 [Serializable]
 public class UserSaveData
 {
     public string userID;
+    public Gender gender;
     public int userLevel;
     public float userExp;
     public UserStats userStats;

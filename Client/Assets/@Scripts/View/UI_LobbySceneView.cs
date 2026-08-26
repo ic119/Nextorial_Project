@@ -10,10 +10,13 @@ public class UI_LobbySceneView : MonoBehaviour
     [SerializeField] private Button startButton;
     [SerializeField] private Button continueButton;
     [SerializeField] private Button exitButton;
+
+    [Header("Popups")]
+    [SerializeField] private UI_CharacterCreatePopup characterCreatePopup;
     #endregion
 
     #region LifeCycle
-private void Awake()
+    private void Awake()
     {
         if (maskImage != null)
         {
@@ -25,9 +28,56 @@ private void Awake()
             bool hasSaveData = GameManager.Instance != null && GameManager.Instance.HasSaveData;
             continueButton.gameObject.SetActive(hasSaveData);
         }
+
+        if (startButton != null)
+        {
+            startButton.onClick.AddListener(OnClickStartButton);
+        }
+
+        if (exitButton != null)
+        {
+            exitButton.onClick.AddListener(OnClickExitButton);
+        }
+
+        if (continueButton != null)
+        {
+            continueButton.onClick.AddListener(OnClickContinueButton);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (startButton != null) startButton.onClick.RemoveAllListeners();
+        if (continueButton != null) continueButton.onClick.RemoveAllListeners();
+        if (exitButton != null) exitButton.onClick.RemoveAllListeners();
     }
     #endregion
 
     #region Method
+    private void OnClickStartButton()
+    {
+        if (characterCreatePopup != null)
+        {
+            characterCreatePopup.Open();
+        }
+    }
+
+    private void OnClickContinueButton()
+    {
+        // 이어하기 로직
+        if (LoadSceneController.Instance != null)
+        {
+            LoadSceneController.Instance.LoadSceneByTags("GameScene");
+        }
+    }
+
+    private void OnClickExitButton()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
     #endregion
 }
