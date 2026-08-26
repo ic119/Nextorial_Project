@@ -22,7 +22,7 @@ private void Awake()
 
         if (continueButton != null)
         {
-            bool hasSaveData = SaveDataController.Instance != null && SaveDataController.Instance.HasSaveData();
+            bool hasSaveData = GameManager.Instance != null && GameManager.Instance.HasSaveData;
             continueButton.gameObject.SetActive(hasSaveData);
         }
     }

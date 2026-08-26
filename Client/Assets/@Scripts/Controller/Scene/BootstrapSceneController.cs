@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using UnityEngine;
 
@@ -107,10 +107,15 @@ public class BootstrapSceneController : MonoBehaviour
 
 
     #region LifeCycle
-    private void Start()
+private void Start()
     {
         lifetimeCts = new CancellationTokenSource();
         currentProgressValue = 0f;
+
+        if (GameManager.Instance != null && SaveDataController.Instance != null)
+        {
+            GameManager.Instance.HasSaveData = SaveDataController.Instance.HasSaveData();
+        }
 
         LoadSceneManage loadSceneManage = new LoadSceneManage(SetStatusMessage);
         AddressableAssetManage addressableAssetManage = new AddressableAssetManage(SetStatusMessage);
