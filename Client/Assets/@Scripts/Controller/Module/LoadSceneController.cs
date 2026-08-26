@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -37,33 +37,52 @@ public class LoadSceneController : SingletonObject<LoadSceneController>
             controller.AddKeyHashSet(key);
             controller.LoadPrefabAddress<GameObject>(key);
 
-            // 이미 캐시되어 있으면 즉시 완료
-            if (controller.IsLoaded(key))
+            if (!controller.IsLoaded(key))
             {
-                return;
+                float startTime = Time.unscaledTime;
+                await controller.WaitForLoadAsync(key, () => Time.unscaledTime - startTime >= loadTimeoutSeconds);
+
+                if (!controller.IsLoaded(key))
+                {
+                    if (controller.HasLoadFailed(key))
+                    {
+                        DebugLogController.GenerateErrorMessage<LoadSceneController>(
+                            $"Addressable 프리로드 실패 Key : {key}");
+                    }
+                    else
+                    {
+                        DebugLogController.GenerateErrorMessage<LoadSceneController>(
+                            $"Addressable 프리로드 타임아웃 Key : {key}, Timeout : {loadTimeoutSeconds}s");
+                    }
+                    return;
+                }
             }
 
-            // 핸들 폴링 + NextFrameAsync 루프는 AddressableAssetController.WaitForLoadAsync로 공통화되어 있으므로
-            // 여기서는 타임아웃 조건만 전달해 중복 구현을 피한다.
-            float startTime = Time.unscaledTime;
-            await controller.WaitForLoadAsync(key, () => Time.unscaledTime - startTime >= loadTimeoutSeconds);
+            SpawnInstance();
+        }
 
-            if (controller.IsLoaded(key))
-            {
-                return;
-            }
 
-            if (controller.HasLoadFailed(key))
+        /// <summary>
+        /// 로드가 끝난 프리팹을 ObjectPoolController를 통해 실제로 생성(대여)한다.
+        /// preloadAddressableKeys에 등록된 Key는 로드 후 곧바로 화면에 표시될 프리팹이라는 전제이다.
+        /// </summary>
+        private void SpawnInstance()
+        {
+            if (ObjectPoolController.Instance == null)
             {
                 DebugLogController.GenerateErrorMessage<LoadSceneController>(
-                    $"Addressable 프리로드 실패 Key : {key}");
+                    $"ObjectPoolController.Instance가 없어 Key '{key}'를 생성할 수 없습니다.");
                 return;
             }
 
-            // 위 두 경우가 아니라면 타임아웃으로 대기가 중단된 것이다.
-            DebugLogController.GenerateErrorMessage<LoadSceneController>(
-                $"Addressable 프리로드 타임아웃 Key : {key}, Timeout : {loadTimeoutSeconds}s");
+            GameObject spawned = ObjectPoolController.Instance.Get(key);
+            if (spawned == null)
+            {
+                DebugLogController.GenerateErrorMessage<LoadSceneController>(
+                    $"Addressable 프리팹 생성 실패 Key : {key}");
+            }
         }
+
     }
 
     private class AdditiveSceneLoadTask : ILoadTask

@@ -17,10 +17,6 @@ public interface IPoolable
     void OnReleaseToPool();
 }
 
-/// <summary>
-/// AddressableAssetController로 로드한 프리팹을 키(Addressable Key) 단위로 풀링하는 싱글톤 컨트롤러.
-/// 잦은 Instantiate/Destroy 대신 비활성 인스턴스를 재사용하여 비용 감소소
-/// </summary>
 public class ObjectPoolController : SingletonObject<ObjectPoolController>
 {
     #region Variable

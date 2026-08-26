@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d80f909031f80444b80f26427d8eb06, type: 3}
+  m_Name: SceneDataModelSO
+  m_EditorClassIdentifier: Assembly-CSharp::SceneDataModelSO
+  sceneDataModels:
+  - tags: BootstrapScene
+    loadedSceneList:
+    - BootstrapScene
+    activeSceneName: BootstrapScene
+  - tags: LobbyScene
+    loadedSceneList:
+    - LobbyScene
+    activeSceneName: LobbyScene
+  - tags: GameScene
+    loadedSceneList:
+    - GameScene
+    activeSceneName: GameScene

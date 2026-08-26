@@ -1,25 +1,9 @@
-using UnityEngine;
-
-public enum MouseInteracionType
-{
-    None,
-    Move,
-    DragDrop
-}
+﻿using UnityEngine;
 
 public enum AddressableKey
 {
     None,
-    TestRoad,
-    BackgroundRoad,
-    Target,
-    CarModel001,
-    CarModel002,
-    UI_MainScene,
-    Building001,
-    Building002,
-    Building003,
-    StraightRoad,
-    UnderpassRoad,
-    TrafficCone
+    UI_ProgressBar,
+    UI_LobbyScene,
+    UI_GameScene
 }
