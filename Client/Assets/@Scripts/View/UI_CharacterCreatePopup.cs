@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,6 +24,8 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     [SerializeField] private TextMeshProUGUI previewNameBadge;
     [SerializeField] private TextMeshProUGUI previewGenderBadge;
     [SerializeField] private CharacterPreviewStage previewStage;
+    [SerializeField] private float rotationStepAngle = 45f;
+    [SerializeField] private Vector3 dynamicStageSpawnPosition = new Vector3(500f, 500f, 500f);
 
     [Header("Nickname Input")]
     [SerializeField] private TMP_InputField nicknameInputField;
@@ -60,9 +63,19 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     private Gender selectedGender = Gender.Male;
     private UserStats baseUserStats;
     private bool isInitialized = false;
+    private bool isPreviewStageDynamicallyCreated = false;
+    private Action<float> onRotateDeltaHandler;
+
+    private static readonly Regex ValidNicknamePattern = new Regex(@"^[a-zA-Z0-9가-힣]+$");
 
     public event Action<UserSaveData> OnCharacterCreated;
     public event Action OnPopupClosed;
+
+    /// <summary>
+    /// 실제 저장/게임 상태 갱신을 담당하는 상위 Controller가 주입하는 처리기.
+    /// 성공 시 true, 실패 시 false를 반환해야 함.
+    /// </summary>
+    public Func<UserSaveData, bool> OnCreateRequested;
     #endregion
 
     #region LifeCycle
@@ -76,7 +89,7 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         ResetForm();
         if (previewStage != null && characterPreviewImage != null)
         {
-            var rt = previewStage.SetupPreview(1024, 1024);
+            var rt = previewStage.PreviewTexture != null ? previewStage.PreviewTexture : previewStage.SetupPreview(1024, 1024);
             characterPreviewImage.texture = rt;
             previewStage.SetGender(selectedGender);
         }
@@ -85,6 +98,11 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     private void OnDestroy()
     {
         UnregisterEvents();
+
+        if (isPreviewStageDynamicallyCreated && previewStage != null)
+        {
+            Destroy(previewStage.gameObject);
+        }
     }
     #endregion
 
@@ -108,8 +126,9 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         if (previewStage == null)
         {
             var stageGo = new GameObject("CharacterPreviewStage");
-            stageGo.transform.position = new Vector3(500f, 500f, 500f);
+            stageGo.transform.position = dynamicStageSpawnPosition;
             previewStage = stageGo.AddComponent<CharacterPreviewStage>();
+            isPreviewStageDynamicallyCreated = true;
         }
 
         if (characterPreviewImage != null && previewStage != null)
@@ -142,12 +161,12 @@ public class UI_CharacterCreatePopup : MonoBehaviour
 
         if (rotateLeftButton != null)
         {
-            rotateLeftButton.onClick.AddListener(() => previewStage?.RotateLeft(45f));
+            rotateLeftButton.onClick.AddListener(() => previewStage?.RotateLeft(rotationStepAngle));
         }
 
         if (rotateRightButton != null)
         {
-            rotateRightButton.onClick.AddListener(() => previewStage?.RotateRight(45f));
+            rotateRightButton.onClick.AddListener(() => previewStage?.RotateRight(rotationStepAngle));
         }
 
         if (resetRotationButton != null)
@@ -157,7 +176,8 @@ public class UI_CharacterCreatePopup : MonoBehaviour
 
         if (dragRotateHandler != null)
         {
-            dragRotateHandler.OnRotateDelta += (delta) => previewStage?.AddRotation(delta);
+            onRotateDeltaHandler = (delta) => previewStage?.AddRotation(delta);
+            dragRotateHandler.OnRotateDelta += onRotateDeltaHandler;
         }
 
         if (createButton != null)
@@ -191,6 +211,12 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         if (createButton != null) createButton.onClick.RemoveAllListeners();
         if (cancelButton != null) cancelButton.onClick.RemoveAllListeners();
         if (closeButton != null) closeButton.onClick.RemoveAllListeners();
+
+        if (dragRotateHandler != null && onRotateDeltaHandler != null)
+        {
+            dragRotateHandler.OnRotateDelta -= onRotateDeltaHandler;
+            onRotateDeltaHandler = null;
+        }
     }
 
     public void Open()
@@ -297,7 +323,13 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             return false;
         }
 
-        // 특수문자 검사 (선택적)
+        if (!ValidNicknamePattern.IsMatch(text.Trim()))
+        {
+            SetFeedback("닉네임은 한글, 영문, 숫자만 사용할 수 있습니다.", new Color(1f, 0.4f, 0.4f, 1f));
+            SetCreateButtonInteractable(false);
+            return false;
+        }
+
         SetFeedback("사용 가능한 닉네임입니다.", new Color(0.3f, 0.9f, 0.5f, 1f));
         SetCreateButtonInteractable(true);
         return true;
@@ -339,7 +371,7 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             return;
         }
 
-        // 유저 세이브 데이터 구성
+        // 유저 세이브 데이터 구성 (UI 입력값만 담당 - 저장/게임 상태 처리는 상위 Controller가 담당)
         var userSaveData = new UserSaveData
         {
             userID = nickname,
@@ -354,30 +386,17 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             }
         };
 
-        var fullSaveModel = new SaveUserDataModel
+        if (OnCreateRequested == null)
         {
-            user = userSaveData,
-            dragon = new DragonSaveData
-            {
-                dragonID = "BabyDragon",
-                dragonLevel = 1,
-                dragonStats = new DragonStats { str = 5, mana = 10 }
-            }
-        };
-
-        // 저장 실행
-        if (SaveDataController.Instance != null)
-        {
-            bool saveSuccess = SaveDataController.Instance.Save(fullSaveModel);
-            if (saveSuccess)
-            {
-                DebugLogController.GenerateLogMessage<UI_CharacterCreatePopup>($"캐릭터 생성 및 저장 성공: {nickname} ({selectedGender})");
-            }
+            SetFeedback("저장 처리기가 연결되지 않아 저장에 실패했습니다.", new Color(1f, 0.4f, 0.4f, 1f));
+            return;
         }
 
-        if (GameManager.Instance != null)
+        bool saveSuccess = OnCreateRequested.Invoke(userSaveData);
+        if (!saveSuccess)
         {
-            GameManager.Instance.HasSaveData = true;
+            SetFeedback("캐릭터 저장에 실패했습니다. 다시 시도해 주세요.", new Color(1f, 0.4f, 0.4f, 1f));
+            return;
         }
 
         OnCharacterCreated?.Invoke(userSaveData);

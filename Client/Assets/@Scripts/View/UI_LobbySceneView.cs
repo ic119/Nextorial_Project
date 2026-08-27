@@ -13,6 +13,8 @@ public class UI_LobbySceneView : MonoBehaviour
 
     [Header("Popups")]
     [SerializeField] private UI_CharacterCreatePopup characterCreatePopup;
+
+    public UI_CharacterCreatePopup CharacterCreatePopup => characterCreatePopup;
     #endregion
 
     #region LifeCycle

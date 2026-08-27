@@ -25,6 +25,7 @@ public class LobbySceneController : MonoBehaviour
 
         if (lobbySceneView != null)
         {
+            WireCharacterCreatePopup(lobbySceneView);
             return;
         }
 
@@ -39,6 +40,7 @@ public class LobbySceneController : MonoBehaviour
                 {
                     var uiObj = AddressableAssetController.Instance.InstantiatePrefab(prefab);
                     lobbySceneView = uiObj.GetComponent<UI_LobbySceneView>();
+                    WireCharacterCreatePopup(lobbySceneView);
                 }
                 else
                 {
@@ -46,6 +48,53 @@ public class LobbySceneController : MonoBehaviour
                 }
             });
         }
+    }
+
+    private void WireCharacterCreatePopup(UI_LobbySceneView view)
+    {
+        var popup = view != null ? view.CharacterCreatePopup : null;
+        if (popup != null)
+        {
+            popup.OnCreateRequested = HandleCharacterCreateRequested;
+        }
+    }
+
+    /// <summary>
+    /// UI_CharacterCreatePopup으로부터 위임받은 캐릭터 저장 및 게임 상태 갱신 처리.
+    /// 성공 시 true, 실패 시 false를 반환.
+    /// </summary>
+    private bool HandleCharacterCreateRequested(UserSaveData userSaveData)
+    {
+        var fullSaveModel = new SaveUserDataModel
+        {
+            user = userSaveData,
+            dragon = new DragonSaveData
+            {
+                dragonID = "BabyDragon",
+                dragonLevel = 1,
+                dragonStats = new DragonStats { str = 5, mana = 10 }
+            }
+        };
+
+        if (SaveDataController.Instance == null)
+        {
+            return false;
+        }
+
+        bool saveSuccess = SaveDataController.Instance.Save(fullSaveModel);
+        if (!saveSuccess)
+        {
+            return false;
+        }
+
+        DebugLogController.GenerateLogMessage<LobbySceneController>($"캐릭터 생성 및 저장 성공: {userSaveData.userID} ({userSaveData.gender})");
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.HasSaveData = true;
+        }
+
+        return true;
     }
     #endregion
 }
