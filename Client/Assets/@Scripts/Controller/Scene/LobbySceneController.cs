@@ -87,7 +87,7 @@ public class LobbySceneController : MonoBehaviour
             return false;
         }
 
-        DebugLogController.GenerateLogMessage<LobbySceneController>($"캐릭터 생성 및 저장 성공: {userSaveData.userID} ({userSaveData.gender})");
+        DebugLogController.GenerateLogMessage<LobbySceneController>($"캐릭터 생성 및 저장 성공: {userSaveData.userID} (헤어:{userSaveData.hairIndex}, 눈:{userSaveData.eyeIndex}, 입:{userSaveData.mouthIndex})");
 
         if (GameManager.Instance != null)
         {

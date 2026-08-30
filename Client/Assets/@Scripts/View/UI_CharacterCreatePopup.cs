@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
@@ -6,9 +6,9 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 캐릭터 생성 팝업 UI View
-/// - 3D 캐릭터 실시간 프리뷰 영역
+/// - 3D 캐릭터 실시간 프리뷰 영역 (회전 제어)
 /// - 닉네임 입력 및 글자 수/유효성 검사
-/// - 성별(남/여) 선택 및 3D 모델 실시간 연동
+/// - 캐릭터 외형(머리, 눈, 입) 실시간 커스터마이징 및 3D 모델 연동
 /// - 기본 능력치 표시
 /// - 캐릭터 저장 및 팝업 닫기/취소 기능
 /// </summary>
@@ -22,7 +22,6 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     [SerializeField] private Button rotateRightButton;
     [SerializeField] private Button resetRotationButton;
     [SerializeField] private TextMeshProUGUI previewNameBadge;
-    [SerializeField] private TextMeshProUGUI previewGenderBadge;
     [SerializeField] private CharacterPreviewStage previewStage;
     [SerializeField] private float rotationStepAngle = 45f;
     [SerializeField] private Vector3 dynamicStageSpawnPosition = new Vector3(500f, 500f, 500f);
@@ -34,13 +33,23 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     [SerializeField] private int minNicknameLength = 2;
     [SerializeField] private int maxNicknameLength = 12;
 
-    [Header("Gender Selection")]
-    [SerializeField] private Button maleButton;
-    [SerializeField] private Button femaleButton;
-    [SerializeField] private Image maleButtonHighlight;
-    [SerializeField] private Image femaleButtonHighlight;
-    [SerializeField] private TextMeshProUGUI maleButtonText;
-    [SerializeField] private TextMeshProUGUI femaleButtonText;
+    [Header("Customization - Hair")]
+    [SerializeField] private Button prevHairButton;
+    [SerializeField] private Button nextHairButton;
+    [SerializeField] private TextMeshProUGUI hairValueText;
+
+    [Header("Customization - Eye")]
+    [SerializeField] private Button prevEyeButton;
+    [SerializeField] private Button nextEyeButton;
+    [SerializeField] private TextMeshProUGUI eyeValueText;
+
+    [Header("Customization - Mouth")]
+    [SerializeField] private Button prevMouthButton;
+    [SerializeField] private Button nextMouthButton;
+    [SerializeField] private TextMeshProUGUI mouthValueText;
+
+    [Header("Customization - Randomize")]
+    [SerializeField] private Button randomizeButton;
 
     [Header("Stats Display")]
     [SerializeField] private TextMeshProUGUI strValueText;
@@ -53,14 +62,14 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     [SerializeField] private Button cancelButton;
     [SerializeField] private Button closeButton;
 
-    [Header("Color Palettes")]
-    [SerializeField] private Color activeMaleColor = new Color(0.2f, 0.7f, 1f, 1f);
-    [SerializeField] private Color activeFemaleColor = new Color(1f, 0.45f, 0.65f, 1f);
-    [SerializeField] private Color selectedBgColor = new Color(0.15f, 0.25f, 0.4f, 0.9f);
-    [SerializeField] private Color normalBgColor = new Color(0.1f, 0.12f, 0.16f, 0.8f);
-    [SerializeField] private Color normalTextColor = new Color(0.75f, 0.8f, 0.88f, 1f);
+    private int selectedHairIndex = 0;
+    private int selectedEyeIndex = 0;
+    private int selectedMouthIndex = 0;
 
-    private Gender selectedGender = Gender.Male;
+    private int totalHairCount = 13;
+    private int totalEyeCount = 12;
+    private int totalMouthCount = 12;
+
     private UserStats baseUserStats;
     private bool isInitialized = false;
     private bool isPreviewStageDynamicallyCreated = false;
@@ -70,6 +79,8 @@ public class UI_CharacterCreatePopup : MonoBehaviour
 
     public event Action<UserSaveData> OnCharacterCreated;
     public event Action OnPopupClosed;
+
+    public CharacterPreviewStage PreviewStage => previewStage;
 
     /// <summary>
     /// 실제 저장/게임 상태 갱신을 담당하는 상위 Controller가 주입하는 처리기.
@@ -91,7 +102,7 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         {
             var rt = previewStage.PreviewTexture != null ? previewStage.PreviewTexture : previewStage.SetupPreview(1024, 1024);
             characterPreviewImage.texture = rt;
-            previewStage.SetGender(selectedGender);
+            previewStage.ApplyCustomization(selectedHairIndex, selectedEyeIndex, selectedMouthIndex);
         }
     }
 
@@ -137,8 +148,19 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             characterPreviewImage.texture = rt;
         }
 
+        UpdateCountsFromStage();
         RegisterEvents();
-        SelectGender(Gender.Male);
+        ApplyCustomizationToPreview();
+    }
+
+    private void UpdateCountsFromStage()
+    {
+        if (previewStage != null)
+        {
+            if (previewStage.HairCount > 0) totalHairCount = previewStage.HairCount;
+            if (previewStage.EyeCount > 0) totalEyeCount = previewStage.EyeCount;
+            if (previewStage.MouthCount > 0) totalMouthCount = previewStage.MouthCount;
+        }
     }
 
     private void RegisterEvents()
@@ -149,16 +171,43 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             nicknameInputField.onValueChanged.AddListener(OnNicknameValueChanged);
         }
 
-        if (maleButton != null)
+        // Hair Customization
+        if (prevHairButton != null)
         {
-            maleButton.onClick.AddListener(() => SelectGender(Gender.Male));
+            prevHairButton.onClick.AddListener(() => ChangeHair(-1));
+        }
+        if (nextHairButton != null)
+        {
+            nextHairButton.onClick.AddListener(() => ChangeHair(1));
         }
 
-        if (femaleButton != null)
+        // Eye Customization
+        if (prevEyeButton != null)
         {
-            femaleButton.onClick.AddListener(() => SelectGender(Gender.Female));
+            prevEyeButton.onClick.AddListener(() => ChangeEye(-1));
+        }
+        if (nextEyeButton != null)
+        {
+            nextEyeButton.onClick.AddListener(() => ChangeEye(1));
         }
 
+        // Mouth Customization
+        if (prevMouthButton != null)
+        {
+            prevMouthButton.onClick.AddListener(() => ChangeMouth(-1));
+        }
+        if (nextMouthButton != null)
+        {
+            nextMouthButton.onClick.AddListener(() => ChangeMouth(1));
+        }
+
+        // Randomize
+        if (randomizeButton != null)
+        {
+            randomizeButton.onClick.AddListener(RandomizeAppearance);
+        }
+
+        // Rotation controls
         if (rotateLeftButton != null)
         {
             rotateLeftButton.onClick.AddListener(() => previewStage?.RotateLeft(rotationStepAngle));
@@ -198,13 +247,14 @@ public class UI_CharacterCreatePopup : MonoBehaviour
 
     private void UnregisterEvents()
     {
-        if (nicknameInputField != null)
-        {
-            nicknameInputField.onValueChanged.RemoveAllListeners();
-        }
-
-        if (maleButton != null) maleButton.onClick.RemoveAllListeners();
-        if (femaleButton != null) femaleButton.onClick.RemoveAllListeners();
+        if (nicknameInputField != null) nicknameInputField.onValueChanged.RemoveAllListeners();
+        if (prevHairButton != null) prevHairButton.onClick.RemoveAllListeners();
+        if (nextHairButton != null) nextHairButton.onClick.RemoveAllListeners();
+        if (prevEyeButton != null) prevEyeButton.onClick.RemoveAllListeners();
+        if (nextEyeButton != null) nextEyeButton.onClick.RemoveAllListeners();
+        if (prevMouthButton != null) prevMouthButton.onClick.RemoveAllListeners();
+        if (nextMouthButton != null) nextMouthButton.onClick.RemoveAllListeners();
+        if (randomizeButton != null) randomizeButton.onClick.RemoveAllListeners();
         if (rotateLeftButton != null) rotateLeftButton.onClick.RemoveAllListeners();
         if (rotateRightButton != null) rotateRightButton.onClick.RemoveAllListeners();
         if (resetRotationButton != null) resetRotationButton.onClick.RemoveAllListeners();
@@ -238,7 +288,13 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             nicknameInputField.text = string.Empty;
         }
 
-        SelectGender(Gender.Male);
+        selectedHairIndex = 0;
+        selectedEyeIndex = 0;
+        selectedMouthIndex = 0;
+
+        UpdateCountsFromStage();
+        UpdateCustomizationUI();
+        ApplyCustomizationToPreview();
         UpdateNicknameValidation(string.Empty);
 
         if (previewStage != null)
@@ -247,48 +303,90 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         }
     }
 
-    public void SelectGender(Gender gender)
+    #region Customization Logic
+    public void ChangeHair(int delta)
     {
-        selectedGender = gender;
-
+        UpdateCountsFromStage();
+        selectedHairIndex = (selectedHairIndex + delta + totalHairCount) % totalHairCount;
+        UpdateHairUI();
         if (previewStage != null)
         {
-            previewStage.SetGender(gender);
-        }
-
-        // 버튼 하이라이트 및 UI 비주얼 갱신
-        bool isMale = gender == Gender.Male;
-
-        if (maleButtonHighlight != null)
-        {
-            maleButtonHighlight.gameObject.SetActive(isMale);
-            maleButtonHighlight.color = activeMaleColor;
-        }
-
-        if (femaleButtonHighlight != null)
-        {
-            femaleButtonHighlight.gameObject.SetActive(!isMale);
-            femaleButtonHighlight.color = activeFemaleColor;
-        }
-
-        if (maleButtonText != null)
-        {
-            maleButtonText.color = isMale ? activeMaleColor : normalTextColor;
-            maleButtonText.fontStyle = isMale ? FontStyles.Bold : FontStyles.Normal;
-        }
-
-        if (femaleButtonText != null)
-        {
-            femaleButtonText.color = !isMale ? activeFemaleColor : normalTextColor;
-            femaleButtonText.fontStyle = !isMale ? FontStyles.Bold : FontStyles.Normal;
-        }
-
-        if (previewGenderBadge != null)
-        {
-            previewGenderBadge.text = isMale ? "남성 (Male)" : "여성 (Female)";
-            previewGenderBadge.color = isMale ? activeMaleColor : activeFemaleColor;
+            previewStage.SetHair(selectedHairIndex);
         }
     }
+
+    public void ChangeEye(int delta)
+    {
+        UpdateCountsFromStage();
+        selectedEyeIndex = (selectedEyeIndex + delta + totalEyeCount) % totalEyeCount;
+        UpdateEyeUI();
+        if (previewStage != null)
+        {
+            previewStage.SetEye(selectedEyeIndex);
+        }
+    }
+
+    public void ChangeMouth(int delta)
+    {
+        UpdateCountsFromStage();
+        selectedMouthIndex = (selectedMouthIndex + delta + totalMouthCount) % totalMouthCount;
+        UpdateMouthUI();
+        if (previewStage != null)
+        {
+            previewStage.SetMouth(selectedMouthIndex);
+        }
+    }
+
+    public void RandomizeAppearance()
+    {
+        UpdateCountsFromStage();
+        selectedHairIndex = UnityEngine.Random.Range(0, totalHairCount);
+        selectedEyeIndex = UnityEngine.Random.Range(0, totalEyeCount);
+        selectedMouthIndex = UnityEngine.Random.Range(0, totalMouthCount);
+        UpdateCustomizationUI();
+        ApplyCustomizationToPreview();
+    }
+
+    private void ApplyCustomizationToPreview()
+    {
+        if (previewStage != null)
+        {
+            previewStage.ApplyCustomization(selectedHairIndex, selectedEyeIndex, selectedMouthIndex);
+        }
+        UpdateCustomizationUI();
+    }
+
+    private void UpdateCustomizationUI()
+    {
+        UpdateHairUI();
+        UpdateEyeUI();
+        UpdateMouthUI();
+    }
+
+    private void UpdateHairUI()
+    {
+        if (hairValueText != null)
+        {
+            hairValueText.text = $"스타일 {selectedHairIndex + 1:D2} / {totalHairCount:D2}";
+        }
+    }
+
+    private void UpdateEyeUI()
+    {
+        if (eyeValueText != null)
+        {
+            eyeValueText.text = $"스타일 {selectedEyeIndex + 1:D2} / {totalEyeCount:D2}";
+        }
+    }
+
+    private void UpdateMouthUI()
+    {
+        if (mouthValueText != null)
+        {
+            mouthValueText.text = $"스타일 {selectedMouthIndex + 1:D2} / {totalMouthCount:D2}";
+        }
+    }
+    #endregion
 
     private void OnNicknameValueChanged(string text)
     {
@@ -375,7 +473,9 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         var userSaveData = new UserSaveData
         {
             userID = nickname,
-            gender = selectedGender,
+            hairIndex = selectedHairIndex,
+            eyeIndex = selectedEyeIndex,
+            mouthIndex = selectedMouthIndex,
             userLevel = 1,
             userExp = 0f,
             userStats = new UserStats
@@ -404,4 +504,3 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     }
     #endregion
 }
-

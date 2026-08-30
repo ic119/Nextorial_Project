@@ -1,9 +1,8 @@
 using System;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 /// <summary>
-/// 3D 캐릭터 실시간 프리뷰를 위한 스테이지, 카메라, 라이팅 및 3D 모델 관리 클래스
+/// 3D 캐릭터 실시간 프리뷰를 위한 스테이지, 카메라, 라이팅 및 커스터마이징 관리 클래스
 /// </summary>
 public class CharacterPreviewStage : MonoBehaviour
 {
@@ -15,9 +14,10 @@ public class CharacterPreviewStage : MonoBehaviour
     [SerializeField] private Transform characterRoot;
     [SerializeField] private Transform stagePedestal;
 
-    [Header("Character Models")]
-    [SerializeField] private GameObject maleCharacterModel;
-    [SerializeField] private GameObject femaleCharacterModel;
+    [Header("Character Model & Customization")]
+    [SerializeField] private GameObject characterPrefab;
+    [SerializeField] private GameObject characterModelInstance;
+    [SerializeField] private CharacterCustomModel customModel;
 
     [Header("Rotation Settings")]
     [SerializeField] private float rotationSensitivity = 0.5f;
@@ -25,12 +25,19 @@ public class CharacterPreviewStage : MonoBehaviour
     [SerializeField] private bool autoRotate = false;
 
     private RenderTexture previewRenderTexture;
-    private Gender currentGender = Gender.Male;
     private float currentYaw = 180f;
     private float targetYaw = 180f;
 
     public RenderTexture PreviewTexture => previewRenderTexture;
-    public Gender CurrentGender => currentGender;
+    public CharacterCustomModel CustomModel => customModel;
+
+    public int HairCount => customModel != null ? customModel.HairCount : 13;
+    public int EyeCount => customModel != null ? customModel.EyeCount : 12;
+    public int MouthCount => customModel != null ? customModel.MouthCount : 12;
+
+    public int CurrentHairIndex => customModel != null ? customModel.CurrentHairIndex : 0;
+    public int CurrentEyeIndex => customModel != null ? customModel.CurrentEyeIndex : 0;
+    public int CurrentMouthIndex => customModel != null ? customModel.CurrentMouthIndex : 0;
     #endregion
 
     #region LifeCycle
@@ -66,6 +73,8 @@ public class CharacterPreviewStage : MonoBehaviour
     /// </summary>
     public RenderTexture SetupPreview(int width = 1024, int height = 1024)
     {
+        InitializeStage();
+
         if (previewRenderTexture != null)
         {
             CleanupRenderTexture();
@@ -87,24 +96,22 @@ public class CharacterPreviewStage : MonoBehaviour
             previewCamera.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0f);
         }
 
-        SetGender(currentGender);
         ResetRotation();
-
         return previewRenderTexture;
     }
 
-    private void InitializeStage()
+    public void InitializeStage()
     {
         if (previewCamera == null)
         {
             var camGo = new GameObject("PreviewCamera");
             camGo.transform.SetParent(transform, false);
-            camGo.transform.localPosition = new Vector3(0f, 1.15f, 2.7f);
-            camGo.transform.localRotation = Quaternion.Euler(5f, 180f, 0f);
+            camGo.transform.localPosition = new Vector3(0f, 1.05f, 2.3f);
+            camGo.transform.localRotation = Quaternion.Euler(3f, 180f, 0f);
             previewCamera = camGo.AddComponent<Camera>();
             previewCamera.clearFlags = CameraClearFlags.SolidColor;
             previewCamera.backgroundColor = new Color(0.06f, 0.08f, 0.12f, 0f);
-            previewCamera.fieldOfView = 36f;
+            previewCamera.fieldOfView = 34f;
             previewCamera.nearClipPlane = 0.1f;
             previewCamera.farClipPlane = 20f;
         }
@@ -117,14 +124,35 @@ public class CharacterPreviewStage : MonoBehaviour
             characterRoot = rootGo.transform;
         }
 
-        // 3D 캐릭터 모델이 없으면 기본 3D 캐릭터 생성
-        EnsureCharacterModels();
-
-        // 조명 설정
+        EnsureCharacterModel();
         EnsureLights();
-
-        // 스테이지 발판 생성
         EnsurePedestal();
+    }
+
+    private void EnsureCharacterModel()
+    {
+        if (characterModelInstance == null)
+        {
+            if (characterPrefab == null)
+            {
+#if UNITY_EDITOR
+                characterPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AddressableAssets/Prefabs/Character/BasicCharacter.prefab");
+#endif
+            }
+
+            if (characterPrefab != null)
+            {
+                characterModelInstance = Instantiate(characterPrefab, characterRoot);
+                characterModelInstance.name = "BasicCharacter_Preview";
+                characterModelInstance.transform.localPosition = Vector3.zero;
+                characterModelInstance.transform.localRotation = Quaternion.identity;
+                customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
+            }
+        }
+        else if (customModel == null)
+        {
+            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
+        }
     }
 
     private void EnsureLights()
@@ -137,8 +165,8 @@ public class CharacterPreviewStage : MonoBehaviour
             keyGo.transform.localRotation = Quaternion.Euler(45f, -140f, 0f);
             keyLight = keyGo.AddComponent<Light>();
             keyLight.type = LightType.Directional;
-            keyLight.intensity = 1.2f;
-            keyLight.color = new Color(1f, 0.96f, 0.9f);
+            keyLight.intensity = 1.3f;
+            keyLight.color = new Color(1f, 0.96f, 0.92f);
         }
 
         if (fillLight == null)
@@ -149,7 +177,7 @@ public class CharacterPreviewStage : MonoBehaviour
             fillGo.transform.localRotation = Quaternion.Euler(20f, 40f, 0f);
             fillLight = fillGo.AddComponent<Light>();
             fillLight.type = LightType.Directional;
-            fillLight.intensity = 0.6f;
+            fillLight.intensity = 0.7f;
             fillLight.color = new Color(0.6f, 0.8f, 1f);
         }
     }
@@ -179,120 +207,40 @@ public class CharacterPreviewStage : MonoBehaviour
         }
     }
 
-    private void EnsureCharacterModels()
+    public void SetHair(int index)
     {
-        if (maleCharacterModel == null)
+        if (customModel == null && characterModelInstance != null)
         {
-            maleCharacterModel = CreateStylizedCharacter(Gender.Male);
-            maleCharacterModel.transform.SetParent(characterRoot, false);
+            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
         }
-
-        if (femaleCharacterModel == null)
-        {
-            femaleCharacterModel = CreateStylizedCharacter(Gender.Female);
-            femaleCharacterModel.transform.SetParent(characterRoot, false);
-        }
+        customModel?.SetHair(index);
     }
 
-    private GameObject CreateStylizedCharacter(Gender gender)
+    public void SetEye(int index)
     {
-        var charGo = new GameObject(gender == Gender.Male ? "MaleCharacter_3D" : "FemaleCharacter_3D");
-        charGo.transform.localPosition = Vector3.zero;
-
-        Color bodyColor = gender == Gender.Male ? new Color(0.2f, 0.45f, 0.85f) : new Color(0.9f, 0.35f, 0.55f);
-        Color accentColor = gender == Gender.Male ? new Color(0.1f, 0.25f, 0.5f) : new Color(0.7f, 0.15f, 0.35f);
-        Color skinColor = new Color(1f, 0.85f, 0.75f);
-        Color hairColor = gender == Gender.Male ? new Color(0.15f, 0.15f, 0.18f) : new Color(0.6f, 0.3f, 0.15f);
-
-        Shader litShader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-
-        Material skinMat = new Material(litShader) { color = skinColor };
-        Material bodyMat = new Material(litShader) { color = bodyColor };
-        Material accentMat = new Material(litShader) { color = accentColor };
-        Material hairMat = new Material(litShader) { color = hairColor };
-
-        // 머리 (Head)
-        var head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        head.name = "Head";
-        head.transform.SetParent(charGo.transform, false);
-        head.transform.localPosition = new Vector3(0f, 1.55f, 0f);
-        head.transform.localScale = new Vector3(0.35f, 0.38f, 0.35f);
-        head.GetComponent<MeshRenderer>().material = skinMat;
-        RemoveCollider(head);
-
-        // 머리카락 (Hair)
-        var hair = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        hair.name = "Hair";
-        hair.transform.SetParent(head.transform, false);
-        hair.transform.localPosition = new Vector3(0f, 0.15f, -0.05f);
-        hair.transform.localScale = gender == Gender.Male ? new Vector3(1.08f, 0.9f, 1.1f) : new Vector3(1.15f, 1.3f, 1.25f);
-        hair.GetComponent<MeshRenderer>().material = hairMat;
-        RemoveCollider(hair);
-
-        // 몸통 (Torso)
-        var torso = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        torso.name = "Torso";
-        torso.transform.SetParent(charGo.transform, false);
-        torso.transform.localPosition = new Vector3(0f, 1.05f, 0f);
-        torso.transform.localScale = gender == Gender.Male ? new Vector3(0.48f, 0.45f, 0.3f) : new Vector3(0.4f, 0.42f, 0.28f);
-        torso.GetComponent<MeshRenderer>().material = bodyMat;
-        RemoveCollider(torso);
-
-        // 벨트 / 악센트 (Belt)
-        var belt = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        belt.name = "Belt";
-        belt.transform.SetParent(charGo.transform, false);
-        belt.transform.localPosition = new Vector3(0f, 0.85f, 0f);
-        belt.transform.localScale = gender == Gender.Male ? new Vector3(0.46f, 0.04f, 0.32f) : new Vector3(0.38f, 0.04f, 0.28f);
-        belt.GetComponent<MeshRenderer>().material = accentMat;
-        RemoveCollider(belt);
-
-        // 팔 (Left / Right Arms)
-        CreateLimb(charGo.transform, "LeftArm", new Vector3(-0.32f, 1.05f, 0f), new Vector3(0.12f, 0.42f, 0.12f), skinMat);
-        CreateLimb(charGo.transform, "RightArm", new Vector3(0.32f, 1.05f, 0f), new Vector3(0.12f, 0.42f, 0.12f), skinMat);
-
-        // 다리 (Left / Right Legs)
-        float legOffset = gender == Gender.Male ? 0.14f : 0.11f;
-        CreateLimb(charGo.transform, "LeftLeg", new Vector3(-legOffset, 0.45f, 0f), new Vector3(0.15f, 0.48f, 0.15f), accentMat);
-        CreateLimb(charGo.transform, "RightLeg", new Vector3(legOffset, 0.45f, 0f), new Vector3(0.15f, 0.48f, 0.15f), accentMat);
-
-        return charGo;
+        if (customModel == null && characterModelInstance != null)
+        {
+            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
+        }
+        customModel?.SetEye(index);
     }
 
-    private void CreateLimb(Transform parent, string name, Vector3 pos, Vector3 scale, Material mat)
+    public void SetMouth(int index)
     {
-        var limb = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        limb.name = name;
-        limb.transform.SetParent(parent, false);
-        limb.transform.localPosition = pos;
-        limb.transform.localScale = scale;
-        limb.GetComponent<MeshRenderer>().material = mat;
-        RemoveCollider(limb);
+        if (customModel == null && characterModelInstance != null)
+        {
+            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
+        }
+        customModel?.SetMouth(index);
     }
 
-    private void RemoveCollider(GameObject go)
+    public void ApplyCustomization(int hairIndex, int eyeIndex, int mouthIndex)
     {
-        var col = go.GetComponent<Collider>();
-        if (col != null)
+        if (customModel == null && characterModelInstance != null)
         {
-            Destroy(col);
+            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
         }
-    }
-
-    /// <summary>
-    /// 성별 변경에 따른 3D 모델 실시간 교체
-    /// </summary>
-    public void SetGender(Gender gender)
-    {
-        currentGender = gender;
-        if (maleCharacterModel != null)
-        {
-            maleCharacterModel.SetActive(gender == Gender.Male);
-        }
-        if (femaleCharacterModel != null)
-        {
-            femaleCharacterModel.SetActive(gender == Gender.Female);
-        }
+        customModel?.ApplyCustomization(hairIndex, eyeIndex, mouthIndex);
     }
 
     /// <summary>
@@ -303,25 +251,16 @@ public class CharacterPreviewStage : MonoBehaviour
         targetYaw -= deltaX * rotationSensitivity;
     }
 
-    /// <summary>
-    /// 좌측 회전 버튼
-    /// </summary>
     public void RotateLeft(float angle = 45f)
     {
         targetYaw += angle;
     }
 
-    /// <summary>
-    /// 우측 회전 버튼
-    /// </summary>
     public void RotateRight(float angle = 45f)
     {
         targetYaw -= angle;
     }
 
-    /// <summary>
-    /// 정면 회전 리셋
-    /// </summary>
     public void ResetRotation()
     {
         targetYaw = 180f;
@@ -332,9 +271,6 @@ public class CharacterPreviewStage : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 자동 회전 토글
-    /// </summary>
     public void SetAutoRotate(bool enabled)
     {
         autoRotate = enabled;

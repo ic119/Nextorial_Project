@@ -354,6 +354,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e80148bcf63944b42a9ae6c458224c75, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LobbySceneController
+  lobbySceneView: {fileID: 0}
 --- !u!4 &1552829888
 Transform:
   m_ObjectHideFlags: 0

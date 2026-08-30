@@ -8,6 +8,9 @@ public class UserSaveData
     public int userLevel;
     public float userExp;
     public UserStats userStats;
+    public int hairIndex;
+    public int eyeIndex;
+    public int mouthIndex;
 }
 
 [Serializable]
