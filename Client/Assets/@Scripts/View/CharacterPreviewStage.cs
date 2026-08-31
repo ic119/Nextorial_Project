@@ -24,9 +24,20 @@ public class CharacterPreviewStage : MonoBehaviour
     [SerializeField] private float autoRotationSpeed = 10f;
     [SerializeField] private bool autoRotate = false;
 
+    /// <summary>
+    /// 프리뷰 카메라가 이 레이어만 렌더링하도록 격리한다. 스테이지가 월드상 먼 좌표에 배치되는 것과
+    /// 별개로, 카메라 컬링마스크 자체를 좁혀서 다른 오브젝트가 우연히 프리뷰에 찍히는 걸 막는다.
+    /// </summary>
+    private const string PreviewLayerName = "CharacterPreview";
+
     private RenderTexture previewRenderTexture;
     private float currentYaw = 180f;
     private float targetYaw = 180f;
+    private bool isRequestingCharacterModel = false;
+
+    private int desiredHairIndex = 0;
+    private int desiredEyeIndex = 0;
+    private int desiredMouthIndex = 0;
 
     public RenderTexture PreviewTexture => previewRenderTexture;
     public CharacterCustomModel CustomModel => customModel;
@@ -38,6 +49,12 @@ public class CharacterPreviewStage : MonoBehaviour
     public int CurrentHairIndex => customModel != null ? customModel.CurrentHairIndex : 0;
     public int CurrentEyeIndex => customModel != null ? customModel.CurrentEyeIndex : 0;
     public int CurrentMouthIndex => customModel != null ? customModel.CurrentMouthIndex : 0;
+
+    /// <summary>
+    /// 캐릭터 모델이 (동기/비동기 로드 어느 쪽이든) 실제로 준비되었을 때 발생.
+    /// Addressable 로드가 늦게 끝나는 경우를 대비해, 구독자는 이 시점에 파츠 개수/외형을 다시 동기화해야 한다.
+    /// </summary>
+    public event Action OnCharacterModelReady;
     #endregion
 
     #region LifeCycle
@@ -127,31 +144,114 @@ public class CharacterPreviewStage : MonoBehaviour
         EnsureCharacterModel();
         EnsureLights();
         EnsurePedestal();
+
+        ApplyPreviewLayer(gameObject);
     }
 
     private void EnsureCharacterModel()
     {
-        if (characterModelInstance == null)
+        if (characterModelInstance != null)
         {
-            if (characterPrefab == null)
+            if (customModel == null)
             {
-#if UNITY_EDITOR
-                characterPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/AddressableAssets/Prefabs/Character/BasicCharacter.prefab");
-#endif
-            }
-
-            if (characterPrefab != null)
-            {
-                characterModelInstance = Instantiate(characterPrefab, characterRoot);
-                characterModelInstance.name = "BasicCharacter_Preview";
-                characterModelInstance.transform.localPosition = Vector3.zero;
-                characterModelInstance.transform.localRotation = Quaternion.identity;
                 customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
             }
+            return;
         }
-        else if (customModel == null)
+
+        if (characterPrefab != null)
         {
-            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
+            InstantiateCharacterModel(characterPrefab);
+            return;
+        }
+
+        if (isRequestingCharacterModel)
+        {
+            return;
+        }
+
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<CharacterPreviewStage>("AddressableAssetController.Instance가 없어 캐릭터 프리뷰 모델을 로드할 수 없습니다.");
+            return;
+        }
+
+        isRequestingCharacterModel = true;
+        string key = AddressableKey.BasicCharacter.ToString();
+
+        AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(key, prefab =>
+        {
+            isRequestingCharacterModel = false;
+
+            if (prefab == null)
+            {
+                DebugLogController.GenerateErrorMessage<CharacterPreviewStage>($"캐릭터 프리뷰 모델 로드 실패 Key : {key}");
+                return;
+            }
+
+            characterPrefab = prefab;
+
+            if (characterModelInstance == null)
+            {
+                InstantiateCharacterModel(prefab);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 동기(Inspector 직접 연결) / 비동기(Addressable 로드 완료) 양쪽 경로에서 공통으로 사용하는
+    /// 캐릭터 모델 인스턴스화 처리. 생성 직후 대기 중이던 커스터마이징 값을 바로 적용한다.
+    /// </summary>
+    private void InstantiateCharacterModel(GameObject prefab)
+    {
+        var instantiated = AddressableAssetController.Instance != null
+            ? AddressableAssetController.Instance.InstantiatePrefab(prefab)
+            : Instantiate(prefab);
+
+        characterModelInstance = instantiated;
+        characterModelInstance.transform.SetParent(characterRoot, false);
+        characterModelInstance.name = "BasicCharacter_Preview";
+        characterModelInstance.transform.localPosition = Vector3.zero;
+        characterModelInstance.transform.localRotation = Quaternion.identity;
+        customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
+
+        ApplyPreviewLayer(characterModelInstance);
+        customModel?.ApplyCustomization(desiredHairIndex, desiredEyeIndex, desiredMouthIndex);
+
+        OnCharacterModelReady?.Invoke();
+    }
+
+    /// <summary>
+    /// 프리뷰 카메라가 CharacterPreview 레이어만 렌더링하도록 컬링마스크를 좁히고,
+    /// 대상 오브젝트 하위 전체를 그 레이어로 옮긴다. 스테이지가 먼 좌표에 격리되는 것과 별개로,
+    /// 다른 오브젝트가 카메라 프러스텀에 우연히 겹쳐도 프리뷰에 찍히지 않게 하기 위함이다.
+    /// </summary>
+    private void ApplyPreviewLayer(GameObject target)
+    {
+        if (target == null) return;
+
+        int previewLayer = LayerMask.NameToLayer(PreviewLayerName);
+        if (previewLayer < 0)
+        {
+            DebugLogController.GenerateErrorMessage<CharacterPreviewStage>(
+                $"레이어 '{PreviewLayerName}'를 찾을 수 없습니다. Project Settings > Tags and Layers에서 추가해주세요.");
+            return;
+        }
+
+        SetLayerRecursively(target, previewLayer);
+
+        if (previewCamera != null)
+        {
+            previewCamera.cullingMask = 1 << previewLayer;
+        }
+    }
+
+    private static void SetLayerRecursively(GameObject target, int layer)
+    {
+        target.layer = layer;
+        foreach (Transform child in target.transform)
+        {
+            SetLayerRecursively(child.gameObject, layer);
         }
     }
 
@@ -209,38 +309,43 @@ public class CharacterPreviewStage : MonoBehaviour
 
     public void SetHair(int index)
     {
-        if (customModel == null && characterModelInstance != null)
-        {
-            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
-        }
+        desiredHairIndex = index;
+        EnsureCustomModelReference();
         customModel?.SetHair(index);
     }
 
     public void SetEye(int index)
     {
-        if (customModel == null && characterModelInstance != null)
-        {
-            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
-        }
+        desiredEyeIndex = index;
+        EnsureCustomModelReference();
         customModel?.SetEye(index);
     }
 
     public void SetMouth(int index)
     {
-        if (customModel == null && characterModelInstance != null)
-        {
-            customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
-        }
+        desiredMouthIndex = index;
+        EnsureCustomModelReference();
         customModel?.SetMouth(index);
     }
 
     public void ApplyCustomization(int hairIndex, int eyeIndex, int mouthIndex)
     {
+        desiredHairIndex = hairIndex;
+        desiredEyeIndex = eyeIndex;
+        desiredMouthIndex = mouthIndex;
+        EnsureCustomModelReference();
+        customModel?.ApplyCustomization(hairIndex, eyeIndex, mouthIndex);
+    }
+
+    /// <summary>
+    /// 캐릭터 모델이 Addressable 로드로 늦게 생성된 경우를 대비해, 매 호출 시 참조를 다시 확인한다.
+    /// </summary>
+    private void EnsureCustomModelReference()
+    {
         if (customModel == null && characterModelInstance != null)
         {
             customModel = characterModelInstance.GetComponent<CharacterCustomModel>();
         }
-        customModel?.ApplyCustomization(hairIndex, eyeIndex, mouthIndex);
     }
 
     /// <summary>

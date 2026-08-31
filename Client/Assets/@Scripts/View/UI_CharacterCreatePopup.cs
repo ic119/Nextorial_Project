@@ -110,6 +110,11 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     {
         UnregisterEvents();
 
+        if (previewStage != null)
+        {
+            previewStage.OnCharacterModelReady -= HandleCharacterModelReady;
+        }
+
         if (isPreviewStageDynamicallyCreated && previewStage != null)
         {
             Destroy(previewStage.gameObject);
@@ -148,8 +153,23 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             characterPreviewImage.texture = rt;
         }
 
+        if (previewStage != null)
+        {
+            previewStage.OnCharacterModelReady += HandleCharacterModelReady;
+        }
+
         UpdateCountsFromStage();
         RegisterEvents();
+        ApplyCustomizationToPreview();
+    }
+
+    /// <summary>
+    /// 캐릭터 모델이 Addressable 비동기 로드로 늦게 준비된 경우, 실제 파츠 개수와
+    /// 현재 선택된 외형을 다시 동기화한다.
+    /// </summary>
+    private void HandleCharacterModelReady()
+    {
+        UpdateCountsFromStage();
         ApplyCustomizationToPreview();
     }
 

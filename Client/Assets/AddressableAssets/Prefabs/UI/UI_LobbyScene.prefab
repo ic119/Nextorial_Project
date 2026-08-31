@@ -4475,7 +4475,7 @@ GameObject:
   - component: {fileID: 1119144119595424534}
   - component: {fileID: 5933624378558020966}
   m_Layer: 0
-  m_Name: MainWindow
+  m_Name: MainWindowContainer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8497,7 +8497,7 @@ GameObject:
   - component: {fileID: 2266728439465994819}
   - component: {fileID: 7568791971867920873}
   m_Layer: 0
-  m_Name: DimMask
+  m_Name: DimMaskImage
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
