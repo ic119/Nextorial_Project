@@ -86,5 +86,32 @@ public class SaveDataController : SingletonObject<SaveDataController>
         return File.Exists(SaveFilePath);
     }
 
+    /// <summary>
+    /// 이미 생성된 캐릭터의 외형(헤어/눈/입)만 갱신해서 다시 저장한다.
+    /// 최초 캐릭터 생성은 LobbySceneController가 SaveUserDataModel 전체를 구성해 Save()를 직접 호출하므로,
+    /// 이 메서드는 "이미 생성된 캐릭터의 외형을 나중에 다시 바꾸는" 시나리오 전용이다.
+    /// CurrentData가 비어있으면 먼저 Load를 시도하고, 그래도 user가 없으면(아직 캐릭터 생성 전) 실패로 처리한다.
+    /// </summary>
+    public bool UpdateCharacterCustomization(int hairIndex, int eyeIndex, int mouthIndex)
+    {
+        if (CurrentData == null)
+        {
+            Load();
+        }
+
+        if (CurrentData?.user == null)
+        {
+            DebugLogController.GenerateErrorMessage<SaveDataController>(
+                "갱신할 캐릭터 세이브 데이터가 없습니다. 캐릭터를 먼저 생성해야 합니다.");
+            return false;
+        }
+
+        CurrentData.user.hairIndex = hairIndex;
+        CurrentData.user.eyeIndex = eyeIndex;
+        CurrentData.user.mouthIndex = mouthIndex;
+
+        return Save(CurrentData);
+    }
+
     #endregion
 }

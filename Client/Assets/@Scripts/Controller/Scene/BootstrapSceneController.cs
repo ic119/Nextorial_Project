@@ -114,6 +114,7 @@ private void Start()
 
         if (GameManager.Instance != null && SaveDataController.Instance != null)
         {
+            SaveDataController.Instance.Load();
             GameManager.Instance.HasSaveData = SaveDataController.Instance.HasSaveData();
         }
 
