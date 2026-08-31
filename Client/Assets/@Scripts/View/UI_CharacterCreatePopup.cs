@@ -480,6 +480,19 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         if (totalValueText != null) totalValueText.text = baseUserStats.GetTotal().ToString();
     }
 
+    /// <summary>
+    /// 저장에 사용할 외형 인덱스를 CharacterCustomModel(실제 적용된 모델)에서 읽어온다.
+    /// Addressable 로드가 아직 안 끝나 모델이 없는 예외적인 경우에만 UI가 추적 중인 선택값으로 대체한다.
+    /// </summary>
+    private void ResolveCurrentCustomizationIndices(out int hairIndex, out int eyeIndex, out int mouthIndex)
+    {
+        var customModel = previewStage != null ? previewStage.CustomModel : null;
+
+        hairIndex = customModel != null ? customModel.CurrentHairIndex : selectedHairIndex;
+        eyeIndex = customModel != null ? customModel.CurrentEyeIndex : selectedEyeIndex;
+        mouthIndex = customModel != null ? customModel.CurrentMouthIndex : selectedMouthIndex;
+    }
+
     private void OnClickCreateButton()
     {
         string nickname = nicknameInputField != null ? nicknameInputField.text.Trim() : string.Empty;
@@ -489,13 +502,17 @@ public class UI_CharacterCreatePopup : MonoBehaviour
             return;
         }
 
+        // 저장할 외형 값은 UI가 따로 들고 있는 selected*Index가 아니라, 실제로 화면에 적용된
+        // CharacterCustomModel의 현재 상태를 소스 오브 트루스로 사용한다.
+        ResolveCurrentCustomizationIndices(out int hairIndex, out int eyeIndex, out int mouthIndex);
+
         // 유저 세이브 데이터 구성 (UI 입력값만 담당 - 저장/게임 상태 처리는 상위 Controller가 담당)
         var userSaveData = new UserSaveData
         {
             userID = nickname,
-            hairIndex = selectedHairIndex,
-            eyeIndex = selectedEyeIndex,
-            mouthIndex = selectedMouthIndex,
+            hairIndex = hairIndex,
+            eyeIndex = eyeIndex,
+            mouthIndex = mouthIndex,
             userLevel = 1,
             userExp = 0f,
             userStats = new UserStats

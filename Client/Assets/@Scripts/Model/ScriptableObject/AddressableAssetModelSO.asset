@@ -16,6 +16,6 @@ MonoBehaviour:
   - tags: BootstrapScene
     preloadAddressableKeys: 
   - tags: LobbyScene
-    preloadAddressableKeys: 02000000
+    preloadAddressableKeys: 
   - tags: GameScene
     preloadAddressableKeys: 03000000

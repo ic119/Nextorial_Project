@@ -349,6 +349,32 @@ public class CharacterPreviewStage : MonoBehaviour
     }
 
     /// <summary>
+    /// CharacterCustomModel에 현재 적용된 외형(헤어/눈/입)을 세이브 데이터에 반영해 저장한다.
+    /// 이미 생성된 캐릭터가 있을 때만 성공하며(최초 캐릭터 생성은 LobbySceneController가 별도로 처리),
+    /// 생성 이후 외형을 다시 바꾸는 기능(예: 옷장/재커스터마이징 화면)에서 재사용하기 위한 진입점이다.
+    /// </summary>
+    public bool SaveCurrentCustomization()
+    {
+        EnsureCustomModelReference();
+
+        if (customModel == null)
+        {
+            DebugLogController.GenerateErrorMessage<CharacterPreviewStage>("customModel이 없어 외형을 저장할 수 없습니다.");
+            return false;
+        }
+
+        if (SaveDataController.Instance == null)
+        {
+            return false;
+        }
+
+        return SaveDataController.Instance.UpdateCharacterCustomization(
+            customModel.CurrentHairIndex,
+            customModel.CurrentEyeIndex,
+            customModel.CurrentMouthIndex);
+    }
+
+    /// <summary>
     /// 수동 회전 제어 (드래그 시 호출)
     /// </summary>
     public void AddRotation(float deltaX)

@@ -5,6 +5,8 @@ public class LobbySceneController : MonoBehaviour
     #region Variable
     [Header("UI Reference")]
     [SerializeField] private UI_LobbySceneView lobbySceneView;
+
+    private const string gameSceneTag = "GameScene";
     #endregion
 
     #region LifeCycle
@@ -94,7 +96,35 @@ public class LobbySceneController : MonoBehaviour
             GameManager.Instance.HasSaveData = true;
         }
 
+        TransitionToGameScene();
+
         return true;
+    }
+
+    /// <summary>
+    /// 캐릭터 생성/저장이 끝난 뒤 GameScene으로 전환한다.
+    /// Bootstrap → Lobby 전환과 동일한 LoadSceneController 인프라(LoadSceneByTags)를 재사용한다.
+    /// </summary>
+    private void TransitionToGameScene()
+    {
+        if (LoadSceneController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<LobbySceneController>("LoadSceneController.Instance가 없어 GameScene으로 전환할 수 없습니다.");
+            return;
+        }
+
+        bool started = LoadSceneController.Instance.LoadSceneByTags(gameSceneTag, isSuccess =>
+        {
+            if (!isSuccess)
+            {
+                DebugLogController.GenerateErrorMessage<LobbySceneController>("GameScene 전환 실패.");
+            }
+        });
+
+        if (!started)
+        {
+            DebugLogController.GenerateErrorMessage<LobbySceneController>("GameScene 전환 시작에 실패.");
+        }
     }
     #endregion
 }
