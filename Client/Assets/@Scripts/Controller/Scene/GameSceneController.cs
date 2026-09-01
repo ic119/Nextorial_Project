@@ -1,8 +1,11 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
 {
     #region Variable
+    [Header("Camera Settings")]
+    [SerializeField] private CameraZoomController cameraZoomController;
+
     [Header("Spawn Settings")]
     [SerializeField] private Transform characterSpawnPoint;
     [SerializeField] private Vector3 defaultSpawnPosition = Vector3.zero;
@@ -13,42 +16,11 @@ public class GameSceneController : MonoBehaviour
     #region LifeCycle
     private void Start()
     {
-        EnsureGroundPlane();
         SpawnPlayerCharacter();
     }
     #endregion
 
     #region Method
-    /// <summary>
-    /// 아직 GameScene에 아무 지형도 없어서, 캐릭터가 허공에 뜨지 않도록 최소한의 바닥을 만든다.
-    /// 실제 환경 에셋으로 교체되기 전까지의 임시 플레이스홀더.
-    /// </summary>
-    private void EnsureGroundPlane()
-    {
-        if (GameObject.Find("GroundPlaceholder") != null)
-        {
-            return;
-        }
-
-        var groundGo = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        groundGo.name = "GroundPlaceholder";
-        groundGo.transform.position = Vector3.zero;
-        groundGo.transform.localScale = new Vector3(5f, 1f, 5f);
-
-        var renderer = groundGo.GetComponent<MeshRenderer>();
-        if (renderer != null)
-        {
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"));
-            mat.color = new Color(0.2f, 0.35f, 0.2f);
-            renderer.material = mat;
-        }
-    }
-
-    /// <summary>
-    /// 저장된 유저 데이터(hairIndex/eyeIndex/mouthIndex)로 커스터마이징된 BasicCharacter를
-    /// GameScene 월드에 실제로 스폰한다. 로비 캐릭터 생성 팝업의 프리뷰에서만 보이던 캐릭터를
-    /// 처음으로 실제 게임 월드에 등장시키는 지점이다.
-    /// </summary>
     private void SpawnPlayerCharacter()
     {
         UserSaveData userData = SaveDataController.Instance != null ? SaveDataController.Instance.CurrentData?.user : null;
@@ -77,7 +49,6 @@ public class GameSceneController : MonoBehaviour
 
             if (spawnedCharacter != null)
             {
-                // 이미 스폰된 뒤 콜백이 중복 도착한 경우 등, 재스폰을 방지한다.
                 return;
             }
 
@@ -91,9 +62,21 @@ public class GameSceneController : MonoBehaviour
             var customModel = spawnedCharacter.GetComponent<CharacterCustomModel>();
             customModel?.ApplyCustomization(userData.hairIndex, userData.eyeIndex, userData.mouthIndex);
 
-            // 아직 플레이어 이동/입력 로직이 없는 단계라, Root Motion이 켜진 채로 두면 애니메이션(Idle 등)에
-            // 섞인 미세한 루트 모션만으로도 캐릭터가 스폰 위치를 벗어나 카메라 프러스텀 밖으로 나가버릴 수 있다.
-            // Animator/Avatar 자체는 건드리지 않고, 실제 이동 시스템이 생기기 전까지만 런타임에서 비활성화한다.
+            SetupPhysics(spawnedCharacter);
+            var playerController = spawnedCharacter.AddComponent<PlayerController>();
+
+            if (cameraZoomController != null)
+            {
+                cameraZoomController.SetTarget(playerController);
+            }
+            else
+            {
+                DebugLogController.GenerateErrorMessage<GameSceneController>("cameraZoomController가 지정되지 않아 카메라 추적을 설정할 수 없습니다.");
+            }
+
+            // 이동/충돌은 Rigidbody + PlayerController가 물리적으로 처리하므로, Root Motion이 켜진 채로 두면
+            // 애니메이션(Idle 등)에 섞인 미세한 루트 모션이 그 위에 겹쳐져 위치가 어긋날 수 있다.
+            // Animator/Avatar 자체는 건드리지 않고 런타임에서만 비활성화한다.
             var animator = spawnedCharacter.GetComponent<Animator>();
             if (animator != null)
             {
@@ -112,6 +95,23 @@ public class GameSceneController : MonoBehaviour
             DebugLogController.GenerateLogMessage<GameSceneController>(
                 $"플레이어 캐릭터 스폰 완료: {userData.userID} (헤어:{userData.hairIndex}, 눈:{userData.eyeIndex}, 입:{userData.mouthIndex})");
         });
+    }
+
+    /// <summary>
+    /// MapTile(BoxCollider) 지형과 충돌할 수 있도록 Rigidbody/CapsuleCollider를 부착한다.
+    /// 캐릭터 루트가 발 위치(y=0)를 기준으로 하고 있어, 콜라이더도 그 기준으로 높이 1.8을 잡는다.
+    /// Z축은 고정 스테이지 설계상 항상 같은 깊이에 있어야 하므로 물리적으로도 잠근다.
+    /// </summary>
+    private static void SetupPhysics(GameObject character)
+    {
+        var collider = character.AddComponent<CapsuleCollider>();
+        collider.center = new Vector3(0f, 0.9f, 0f);
+        collider.height = 1.8f;
+        collider.radius = 0.3f;
+
+        var rigidbody = character.AddComponent<Rigidbody>();
+        rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+        rigidbody.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
     }
     #endregion
 }
