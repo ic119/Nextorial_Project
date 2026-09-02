@@ -1,23 +1,21 @@
-using UnityEngine;
-
-public enum AddressableKey
+﻿public enum AddressableKey
 {
     None,
     UI_ProgressBar,
     UI_LobbyScene,
     UI_GameScene,
-    BasicCharacter
+    BasicCharacter,
+    Tile001,
+    Tile002,
+    TileFloor,
+    TileRockFloor,
+    TileStairs
 }
 
-public enum DragonType
+public enum PlayerMoveState
 {
-    Aggressive,  // 공격형
-    Guardian     // 방어형
-}
-
-public enum DragonElement
-{
-    Ice,      // 얼음속성
-    Fire,     // 불속성
-    Lightning // 번개속성
+    IsIdle,
+    IsMove,
+    IsDash,
+    IsJump
 }
