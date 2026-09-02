@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -176,6 +176,49 @@ public class AddressableAssetController : SingletonObject<AddressableAssetContro
             }
         };
     }
+
+/// <summary>
+    /// Addressable 키로 UI 프리팹을 로드해 인스턴스화하고, 지정한 컴포넌트 타입을 찾아 콜백으로 전달한다.
+    /// LobbySceneController/GameSceneController가 각자 LoadPrefabAddress + InstantiatePrefab + GetComponent를
+    /// 반복 구현하던 것을 하나로 모은 공통 진입점이다.
+    ///
+    /// 이미 씬에 같은 타입의 UI가 존재하면(예: 다른 경로로 먼저 인스턴스화된 경우) 새로 만들지 않고
+    /// 그것을 그대로 재사용한다. 과거 LobbyScene/GameScene에서 AddressableAssetModelSO의 preloadAddressableKeys에
+    /// 같은 UI 키가 중복 등록되어, ObjectPoolController가 배선 없는 사본을 하나 더 스폰하는 버그가 있었다
+    /// (닉네임 입력 후 저장이 안 되던 문제). 이 가드는 그런 실수가 재발해도 중복 인스턴스가 남지 않도록 막는다.
+    /// </summary>
+    public void LoadAndBindUI<T>(AddressableKey key, Action<T> onBound) where T : Component
+    {
+        T existing = UnityEngine.Object.FindAnyObjectByType<T>(FindObjectsInactive.Include);
+        if (existing != null)
+        {
+            onBound?.Invoke(existing);
+            return;
+        }
+
+        string keyString = key.ToString();
+
+        LoadPrefabAddress<GameObject>(keyString, prefab =>
+        {
+            if (prefab == null)
+            {
+                DebugLogController.GenerateErrorMessage<AddressableAssetController>($"UI 프리팹 로드 실패 Key : {keyString}");
+                return;
+            }
+
+            GameObject instance = InstantiatePrefab(prefab);
+            T component = instance.GetComponent<T>();
+
+            if (component == null)
+            {
+                DebugLogController.GenerateErrorMessage<AddressableAssetController>($"'{keyString}' 프리팹에 {typeof(T).Name} 컴포넌트가 없습니다.");
+                return;
+            }
+
+            onBound?.Invoke(component);
+        });
+    }
+
 
     private void RegisterLoadingCallback<T>(string _key, Action<T> _onLoad) where T : UnityEngine.Object
     {
