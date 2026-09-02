@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
 {
@@ -11,17 +11,22 @@ public class GameSceneController : MonoBehaviour
     [SerializeField] private Vector3 defaultSpawnPosition = Vector3.zero;
 
     private GameObject spawnedCharacter;
+
+    private UI_GameSceneView gameSceneView;
+    private PlayerCharacterModel spawnedCharacterModel;
+    private UserSaveData cachedUserData;
     #endregion
 
     #region LifeCycle
     private void Start()
     {
         SpawnPlayerCharacter();
+        LoadGameSceneUI();
     }
     #endregion
 
     #region Method
-    private void SpawnPlayerCharacter()
+private void SpawnPlayerCharacter()
     {
         UserSaveData userData = SaveDataController.Instance != null ? SaveDataController.Instance.CurrentData?.user : null;
 
@@ -62,6 +67,14 @@ public class GameSceneController : MonoBehaviour
             var customModel = spawnedCharacter.GetComponent<CharacterCustomModel>();
             customModel?.ApplyCustomization(userData.hairIndex, userData.eyeIndex, userData.mouthIndex);
 
+            var characterModel = spawnedCharacter.GetComponent<PlayerCharacterModel>();
+            characterModel?.ApplyHealth(userData.maxHp, userData.currentHp);
+            characterModel?.ApplyExp(userData.userExp);
+
+            spawnedCharacterModel = characterModel;
+            cachedUserData = userData;
+            TryBindGameSceneView();
+
             SetupPhysics(spawnedCharacter);
             var playerController = spawnedCharacter.AddComponent<PlayerController>();
 
@@ -93,8 +106,42 @@ public class GameSceneController : MonoBehaviour
             }
 
             DebugLogController.GenerateLogMessage<GameSceneController>(
-                $"플레이어 캐릭터 스폰 완료: {userData.userID} (헤어:{userData.hairIndex}, 눈:{userData.eyeIndex}, 입:{userData.mouthIndex})");
+                $"플레이어 캐릭터 스폰 완료: {userData.userID} (헤어:{userData.hairIndex}, 눈:{userData.eyeIndex}, 입:{userData.mouthIndex}, HP:{userData.currentHp}/{userData.maxHp})");
         });
+    }
+
+    /// <summary>
+    /// UI_GameScene(닉네임/HP/EXP 표시)을 Addressable로 로드해 인스턴스화한다.
+    /// 캐릭터 스폰과 별개의 비동기 로드라 완료 순서가 보장되지 않으므로,
+    /// 캐릭터/UI 중 나중에 준비되는 쪽에서 TryBindGameSceneView로 실제 바인딩을 시도한다.
+    /// </summary>
+private void LoadGameSceneUI()
+    {
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("AddressableAssetController.Instance가 없어 UI_GameScene을 로드할 수 없습니다.");
+            return;
+        }
+
+        AddressableAssetController.Instance.LoadAndBindUI<UI_GameSceneView>(AddressableKey.UI_GameScene, view =>
+        {
+            gameSceneView = view;
+            TryBindGameSceneView();
+        });
+    }
+
+    /// <summary>
+    /// 캐릭터 스폰과 UI 로드가 둘 다 끝났을 때만 실제 바인딩을 수행한다.
+    /// 어느 쪽이 먼저 끝나도 동작하도록 양쪽 완료 콜백에서 이 메서드를 호출한다.
+    /// </summary>
+    private void TryBindGameSceneView()
+    {
+        if (gameSceneView == null || spawnedCharacterModel == null || cachedUserData == null)
+        {
+            return;
+        }
+
+        gameSceneView.Bind(cachedUserData, spawnedCharacterModel);
     }
 
     /// <summary>

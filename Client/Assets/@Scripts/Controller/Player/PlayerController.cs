@@ -7,6 +7,7 @@ using UnityEngine.InputSystem;
 /// 좌우 입력 방향에 맞춰 캐릭터가 해당 방향을 바라보도록 Y축 회전도 함께 갱신하고,
 /// PlayerMoveState(IsIdle/IsMove)와 IsJump에 따라 BasicCharacterStance Animator 파라미터를 갱신한다.
 /// SpaceBar 입력 시 접지 상태에서만 위로 속도를 부여해 중력에 의한 포물선 점프를 만든다.
+/// F 입력 시 PlayerCharacterModel에 장착된 무기 타입에 맞는 콤보 공격을 진행한다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerController : MonoBehaviour
@@ -30,17 +31,39 @@ public class PlayerController : MonoBehaviour
     private const float MaxJumpSpeedMultiplier = 3f;
     private const float JumpAscentVelocityThreshold = 0.01f;
 
+    /// <summary>
+    /// SingleSword 콤보 애니메이션 클립 이름(콤보 단계 순서). BasicCharacterStance의
+    /// Attack1/Attack2/Attack3 상태에 연결된 모션과 이름이 일치해야 한다.
+    /// 다른 무기 타입을 추가할 때는 이 배열과 같은 형태로 세트를 하나 더 만들면 된다.
+    /// </summary>
+    private static readonly string[] SingleSwordComboClipNames =
+    {
+        "Combo01_InPlace_SingleSword",
+        "Combo02_InPlace_SingleSword",
+        "Combo03_InPlace_SingleSword"
+    };
+
+    private const float FallbackComboClipLength = 0.6f;
+    private const int MaxComboStep = 3;
+
     private static readonly int IsIdleHash = Animator.StringToHash(nameof(PlayerMoveState.IsIdle));
     private static readonly int IsMoveHash = Animator.StringToHash(nameof(PlayerMoveState.IsMove));
     private static readonly int IsJumpHash = Animator.StringToHash(nameof(PlayerMoveState.IsJump));
     private static readonly int JumpSpeedHash = Animator.StringToHash("JumpSpeed");
+    private static readonly int ComboIndexHash = Animator.StringToHash("ComboIndex");
 
     private Rigidbody rb;
     private Animator animator;
+    private PlayerCharacterModel characterModel;
     private PlayerMoveState currentMoveState = PlayerMoveState.IsIdle;
     private bool jumpRequested;
     private bool isGrounded = true;
     private bool isJumpAnimating;
+
+    private bool attackRequested;
+    private int comboStep;
+    private float comboWindowEndTime;
+    private readonly float[] comboClipLengths = new float[MaxComboStep];
     #endregion
 
     #region Property
@@ -53,6 +76,12 @@ public class PlayerController : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
+        characterModel = GetComponent<PlayerCharacterModel>();
+
+        if (characterModel == null)
+        {
+            DebugLogController.GenerateErrorMessage<PlayerController>("PlayerCharacterModel이 없어 장착된 무기 타입을 확인할 수 없어 콤보 공격이 비활성화됩니다.");
+        }
 
         if (animator == null)
         {
@@ -61,16 +90,27 @@ public class PlayerController : MonoBehaviour
         else
         {
             ApplyJumpAnimationSpeed();
+            CacheComboClipLengths();
         }
     }
 
     private void Update()
     {
         // FixedUpdate보다 프레임이 더 자주 도는 Update에서 눌림을 감지해 다음 FixedUpdate까지 요청을 보관한다.
-        // FixedUpdate에서만 폴링하면 짧게 누른 SpaceBar 입력이 프레임 사이에 씹힐 수 있다.
-        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+        // FixedUpdate에서만 폴링하면 짧게 누른 입력이 프레임 사이에 씹힐 수 있다.
+        if (Keyboard.current == null)
+        {
+            return;
+        }
+
+        if (Keyboard.current.spaceKey.wasPressedThisFrame)
         {
             jumpRequested = true;
+        }
+
+        if (Keyboard.current.fKey.wasPressedThisFrame)
+        {
+            attackRequested = true;
         }
     }
 
@@ -81,13 +121,16 @@ public class PlayerController : MonoBehaviour
         isGrounded = CheckGrounded();
 
         Vector3 velocity = rb.linearVelocity;
-        velocity.x = direction * moveSpeed;
+        // 콤보 공격 중에는 제자리에서 휘두르는 모션(_InPlace_)이므로 좌우 이동을 멈춘다.
+        velocity.x = comboStep > 0 ? 0f : direction * moveSpeed;
 
         if (jumpRequested)
         {
             jumpRequested = false;
 
-            if (isGrounded)
+            // 콤보 공격 중에는 점프를 막아 Attack 상태와 Jump 상태가 동시에 요구되는
+            // 상황(애니메이터 충돌) 자체가 생기지 않도록 한다.
+            if (isGrounded && comboStep == 0)
             {
                 velocity.y = jumpForce;
                 isGrounded = false;
@@ -99,6 +142,7 @@ public class PlayerController : MonoBehaviour
         UpdateFacingDirection(direction);
         UpdateMoveAnimation(direction);
         UpdateJumpAnimation();
+        UpdateCombo();
     }
     #endregion
 
@@ -240,6 +284,97 @@ public class PlayerController : MonoBehaviour
         float speedMultiplier = Mathf.Clamp(clipLength / expectedAirTime, MinJumpSpeedMultiplier, MaxJumpSpeedMultiplier);
 
         animator.SetFloat(JumpSpeedHash, speedMultiplier);
+    }
+
+    /// <summary>
+    /// 콤보 단계별 클립 길이를 미리 읽어둔다. 각 단계의 콤보 유예 시간(다음 입력을 받아줄 창)을
+    /// 해당 단계 클립 길이만큼으로 잡는 데 쓴다. 클립을 찾지 못하면 FallbackComboClipLength로 대체한다.
+    /// </summary>
+    private void CacheComboClipLengths()
+    {
+        for (int i = 0; i < comboClipLengths.Length; i++)
+        {
+            comboClipLengths[i] = FallbackComboClipLength;
+        }
+
+        if (animator.runtimeAnimatorController == null)
+        {
+            return;
+        }
+
+        foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
+        {
+            if (clip == null)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < SingleSwordComboClipNames.Length; i++)
+            {
+                if (clip.name == SingleSwordComboClipNames[i])
+                {
+                    comboClipLengths[i] = clip.length;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// F 입력을 콤보 단계(ComboIndex)로 변환한다.
+    /// - 대기 중(comboStep == 0)이고 접지 상태일 때만 콤보를 시작한다.
+    /// - 콤보 진행 중 다음 입력이 현재 단계의 유예 시간(comboWindowEndTime) 안에 들어오면 다음 단계로 이어간다.
+    /// - 유예 시간을 넘기면 자동으로 대기 상태로 되돌아간다(ComboIndex = 0).
+    /// 장착된 무기 타입은 PlayerCharacterModel이 갖고 있으며, 여기서는 참조만 한다.
+    /// 현재는 SingleSword 클립 세트만 있어 다른 무기 타입일 때는 콤보를 시작하지 않는다.
+    /// </summary>
+private void UpdateCombo()
+    {
+        if (animator == null)
+        {
+            return;
+        }
+
+        if (comboStep > 0 && Time.time > comboWindowEndTime)
+        {
+            comboStep = 0;
+            animator.SetInteger(ComboIndexHash, 0);
+        }
+
+        if (!attackRequested)
+        {
+            return;
+        }
+
+        attackRequested = false;
+
+        WeaponType equippedWeaponType = characterModel != null ? characterModel.CurrentWeaponType : WeaponType.NoWeapon;
+        if (equippedWeaponType != WeaponType.OneHanded)
+        {
+            return;
+        }
+
+        int nextStep;
+        if (comboStep == 0)
+        {
+            if (!isGrounded)
+            {
+                return;
+            }
+
+            nextStep = 1;
+        }
+        else if (comboStep < MaxComboStep && Time.time <= comboWindowEndTime)
+        {
+            nextStep = comboStep + 1;
+        }
+        else
+        {
+            return;
+        }
+
+        comboStep = nextStep;
+        comboWindowEndTime = Time.time + comboClipLengths[nextStep - 1];
+        animator.SetInteger(ComboIndexHash, comboStep);
     }
     #endregion
 }

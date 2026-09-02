@@ -16910,6 +16910,8 @@ MonoBehaviour:
   cloakEqiupment: {fileID: 1318771821611678220}
   leftArmEqiupment: {fileID: 6951739140167240317}
   rightArmEqiupment: {fileID: 6105368201810433905}
+  currentWeaponType: 1
+  singleSwordWeaponObject: {fileID: 4247283017307128051}
 --- !u!1 &6438463510138794830
 GameObject:
   m_ObjectHideFlags: 0
