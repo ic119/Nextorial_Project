@@ -123,22 +123,42 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     #endregion
 
     #region Method
-    public void InitializeComponents()
+public void InitializeComponents()
     {
         if (isInitialized) return;
         isInitialized = true;
 
+        // Create/Cancel/닉네임 등 핵심 버튼 배선(RegisterEvents)은 3D 프리뷰 설정보다 먼저, 독립적으로 실행되어야 한다.
+        // 프리뷰 스테이지 초기화(카메라/렌더텍스처/머트리얼 생성 등)가 예외로 실패해도
+        // 케릭터 생성 자체는 계속 동작해야 한다 — 이전에는 RegisterEvents가 이 메서드 끝에 있어서,
+        // 위 초기화 중 하나라도 예외가 나면 Create 버튼이 영원히 작동하지 않는 문제가 있었다.
+        RegisterEvents();
+
         // 기본 능력치 데이터 세팅
-        baseUserStats = new UserStats
-        {
-            str = 10,
-            agi = 10,
-            intel = 10
-        };
+        baseUserStats = UserStats.CreateDefault();
 
         UpdateStatsUI();
 
-        // 3D 프리뷰 스테이지 동적 생성 또는 연결
+        try
+        {
+            InitializePreviewStage();
+        }
+        catch (Exception exception)
+        {
+            DebugLogController.GenerateErrorMessage<UI_CharacterCreatePopup>(
+                $"3D 프리뷰 스테이지 초기화 중 예외가 발생했습니다(캐릭터 생성 자체는 계속 진행 가능) : {exception}");
+        }
+
+        UpdateCountsFromStage();
+        ApplyCustomizationToPreview();
+    }
+
+    /// <summary>
+    /// 3D 캐릭터 미리보기 스테이지를 동적 생성/연결하고 렌더텍스처를 준비한다.
+    /// 카메라/메쉬/셔이더 관련 예외가 여기서 나도 상위 InitializeComponents의 핵심 버튼 배선에는 영향을 주지 않는다.
+    /// </summary>
+    private void InitializePreviewStage()
+    {
         if (previewStage == null)
         {
             var stageGo = new GameObject("CharacterPreviewStage");
@@ -157,10 +177,6 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         {
             previewStage.OnCharacterModelReady += HandleCharacterModelReady;
         }
-
-        UpdateCountsFromStage();
-        RegisterEvents();
-        ApplyCustomizationToPreview();
     }
 
     /// <summary>
@@ -189,6 +205,7 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         {
             nicknameInputField.characterLimit = maxNicknameLength;
             nicknameInputField.onValueChanged.AddListener(OnNicknameValueChanged);
+            nicknameInputField.onValidateInput += ValidateNicknameCharacter;
         }
 
         // Hair Customization
@@ -268,6 +285,7 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     private void UnregisterEvents()
     {
         if (nicknameInputField != null) nicknameInputField.onValueChanged.RemoveAllListeners();
+        if (nicknameInputField != null) nicknameInputField.onValidateInput -= ValidateNicknameCharacter;
         if (prevHairButton != null) prevHairButton.onClick.RemoveAllListeners();
         if (nextHairButton != null) nextHairButton.onClick.RemoveAllListeners();
         if (prevEyeButton != null) prevEyeButton.onClick.RemoveAllListeners();
@@ -408,6 +426,17 @@ public class UI_CharacterCreatePopup : MonoBehaviour
     }
     #endregion
 
+    /// <summary>
+    /// 닉네임 입력 필드에 한글/영문/숫자 외의 문자(공백, 특수문자 등)가 아예 입력되지 않도록 문자 단위로 막는다.
+    /// 제출 시 최종 검증(UpdateNicknameValidation)에서도 같은 ValidNicknamePattern을 쓰므로, 두 검증 기준이 서로 어긋나지 않는다.
+    /// IME(한글 조합) 입력 중간에 완성되지 않은 자모가 들어오는 극드물러운 경우가 있을 수 있으니,
+    /// 만약 한글 입력이 막히는 현상이 발견되면 이 메서드를 제거하고 제출 시 검증만으로 되돌려야 한다.
+    /// </summary>
+    private char ValidateNicknameCharacter(string text, int charIndex, char addedChar)
+    {
+        return ValidNicknamePattern.IsMatch(addedChar.ToString()) ? addedChar : '\0';
+    }
+
     private void OnNicknameValueChanged(string text)
     {
         UpdateNicknameValidation(text);
@@ -507,24 +536,12 @@ public class UI_CharacterCreatePopup : MonoBehaviour
         ResolveCurrentCustomizationIndices(out int hairIndex, out int eyeIndex, out int mouthIndex);
 
         // 유저 세이브 데이터 구성 (UI 입력값만 담당 - 저장/게임 상태 처리는 상위 Controller가 담당)
-        var userSaveData = new UserSaveData
-        {
-            userID = nickname,
-            hairIndex = hairIndex,
-            eyeIndex = eyeIndex,
-            mouthIndex = mouthIndex,
-            userLevel = 1,
-            userExp = 0f,
-            userStats = new UserStats
-            {
-                str = baseUserStats.str,
-                agi = baseUserStats.agi,
-                intel = baseUserStats.intel
-            }
-        };
+        var userSaveData = UserSaveData.CreateDefault(nickname, hairIndex, eyeIndex, mouthIndex);;
 
         if (OnCreateRequested == null)
         {
+            DebugLogController.GenerateErrorMessage<UI_CharacterCreatePopup>(
+                $"OnCreateRequested가 null입니다. popup InstanceID={GetInstanceID()}. LobbySceneController.WireCharacterCreatePopup 로그의 InstanceID와 비교해주세요.");
             SetFeedback("저장 처리기가 연결되지 않아 저장에 실패했습니다.", new Color(1f, 0.4f, 0.4f, 1f));
             return;
         }

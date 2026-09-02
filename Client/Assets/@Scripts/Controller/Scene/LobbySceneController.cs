@@ -17,9 +17,8 @@ public class LobbySceneController : MonoBehaviour
     #endregion
 
     #region Method
-    private void InitializeLobbyUI()
+private void InitializeLobbyUI()
     {
-        // 씬에 이미 UI_LobbySceneView가 배치되어 있는지 확인
         if (lobbySceneView == null)
         {
             lobbySceneView = Object.FindAnyObjectByType<UI_LobbySceneView>();
@@ -31,34 +30,36 @@ public class LobbySceneController : MonoBehaviour
             return;
         }
 
-        // AddressableAssetController를 통한 비동기 UI 프리팹 로드
-        string key = AddressableKey.UI_LobbyScene.ToString();
-
-        if (AddressableAssetController.Instance != null)
+        if (AddressableAssetController.Instance == null)
         {
-            AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(key, prefab =>
-            {
-                if (prefab != null)
-                {
-                    var uiObj = AddressableAssetController.Instance.InstantiatePrefab(prefab);
-                    lobbySceneView = uiObj.GetComponent<UI_LobbySceneView>();
-                    WireCharacterCreatePopup(lobbySceneView);
-                }
-                else
-                {
-                    DebugLogController.GenerateErrorMessage<LobbySceneController>($"LobbyScene UI 로드 실패 Key: {key}");
-                }
-            });
+            DebugLogController.GenerateErrorMessage<LobbySceneController>("AddressableAssetController.Instance가 없어 LobbyScene UI를 로드할 수 없습니다.");
+            return;
         }
+
+        AddressableAssetController.Instance.LoadAndBindUI<UI_LobbySceneView>(AddressableKey.UI_LobbyScene, view =>
+        {
+            lobbySceneView = view;
+            WireCharacterCreatePopup(view);
+        });
     }
 
-    private void WireCharacterCreatePopup(UI_LobbySceneView view)
+private void WireCharacterCreatePopup(UI_LobbySceneView view)
     {
         var popup = view != null ? view.CharacterCreatePopup : null;
-        if (popup != null)
+
+        // 진단용 로그: OnCreateRequested가 놀 상태로 남는 증상을 추적하기 위해, 어떤 popup 인스턴스(InstanceID)에
+        // 배선했는지를 기록한다. 다음 재현 시 버튼 클릭 시점의 InstanceID와 비교해 동일 인스턴스인지 확인한다.
+        if (popup == null)
         {
-            popup.OnCreateRequested = HandleCharacterCreateRequested;
+            DebugLogController.GenerateErrorMessage<LobbySceneController>(
+                $"WireCharacterCreatePopup: view 또는 popup이 null입니다. view null? {view == null}");
+            return;
         }
+
+        popup.OnCreateRequested = HandleCharacterCreateRequested;
+
+        DebugLogController.GenerateLogMessage<LobbySceneController>(
+            $"WireCharacterCreatePopup 완료. popup InstanceID={popup.GetInstanceID()}, view InstanceID={view.GetInstanceID()}, OnCreateRequested 설정됨={popup.OnCreateRequested != null}");
     }
 
     /// <summary>
