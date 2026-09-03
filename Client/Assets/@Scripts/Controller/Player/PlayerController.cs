@@ -65,7 +65,7 @@ public class PlayerController : MonoBehaviour
     {
         new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
         new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 0f), localEulerAngles = new Vector3(0f, 180f, 90f) },
         new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) }
     };
     [Tooltip("스킬 시전 시점부터 이펙트를 터뜨리까지의 지연 시간(초).")]
@@ -91,6 +91,8 @@ public class PlayerController : MonoBehaviour
     /// 캐릭터 자식으로 한 번만 만들어두고 SetActive만 토글한다.
     /// </summary>
     private GameObject attributeAssignmentEffectInstance;
+    private ParticleSystem attributeAssignmentRootParticle;
+
 
 
 
@@ -781,6 +783,12 @@ private void ActivateFireForceBuff()
         if (attributeAssignmentEffectInstance != null)
         {
             attributeAssignmentEffectInstance.SetActive(true);
+
+            // 자식 파티클이 전부 Play On Awake라 SetActive(true)만으로도 재생되지만,
+            // 잔여 파티클(예: 로드 직후 Instantiate가 즉시 트리거한 재생의 잔상)이 남아있으면
+            // 새 재생과 겹쳐 이펙트가 두 번 나오는 것처럼 보인다. Clear 후 새로 재생해 한 번만 보이게 한다.
+            attributeAssignmentRootParticle?.Clear(true);
+            attributeAssignmentRootParticle?.Play(true);
         }
 
         CancelInvoke(nameof(DeactivateFireForceBuff));
@@ -794,6 +802,8 @@ private void DeactivateFireForceBuff()
 
         if (attributeAssignmentEffectInstance != null)
         {
+            // 다음 ActivateFireForceBuff 때 잔여 파티클이 남지 않도록 완전히 멈추고 비운 뒤 끈다.
+            attributeAssignmentRootParticle?.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             attributeAssignmentEffectInstance.SetActive(false);
         }
     }
@@ -805,7 +815,7 @@ private void DeactivateFireForceBuff()
     /// 켜기 전까지는 보이지 않는다. 루프 파티클이라 풀링(SpawnSlashEffect)이 아니라
     /// 인스턴스 하나를 계속 재사용(SetActive 토글)한다.
     /// </summary>
-    private void LoadAttributeAssignmentEffect()
+private void LoadAttributeAssignmentEffect()
     {
         if (AddressableAssetController.Instance == null)
         {
@@ -827,6 +837,12 @@ private void DeactivateFireForceBuff()
             attributeAssignmentEffectInstance.transform.localPosition = pose.localOffset;
             attributeAssignmentEffectInstance.transform.localRotation = Quaternion.Euler(pose.localEulerAngles);
 
+            attributeAssignmentRootParticle = attributeAssignmentEffectInstance.GetComponent<ParticleSystem>();
+
+            // 자식 파티클이 전부 Play On Awake라 Instantiate 직후 곧바로 재생이 시작된다.
+            // 이 잔여 재생을 지우지 않은 채 SetActive(false)만 하면, 이후 ActivateFireForceBuff가
+            // 다시 켤 때 이 잔상과 새 재생이 겹쳐 이펙트가 두 번 재생되는 것처럼 보인다.
+            attributeAssignmentRootParticle?.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             attributeAssignmentEffectInstance.SetActive(false);
         });
     }
