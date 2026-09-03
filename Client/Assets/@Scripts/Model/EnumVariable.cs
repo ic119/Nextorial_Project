@@ -10,7 +10,8 @@
     Tile002,
     TileFloor,
     TileRockFloor,
-    TileStairs
+    TileStairs,
+    SlashNormal
 }
 
 public enum DragonType

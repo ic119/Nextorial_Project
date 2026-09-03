@@ -50,6 +50,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 83428dbed29e5924690e59dd9fc14b87
+    m_Address: Slash_Normal
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 85da86801cce837468434645505d5895
     m_Address: Tile001
     m_ReadOnly: 0

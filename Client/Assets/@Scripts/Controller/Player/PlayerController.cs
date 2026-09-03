@@ -24,6 +24,29 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float groundCheckOriginOffset = 0.1f;
     [SerializeField] private float groundCheckDistance = 0.2f;
     [SerializeField] private LayerMask groundLayerMask = ~0;
+    [System.Serializable]
+    private struct SlashEffectPose
+    {
+        public Vector3 localOffset;
+        public Vector3 localEulerAngles;
+    }
+
+    [Header("Attack VFX")]
+    [Tooltip("콤보 스텝(1부터 시작)별 스래시 이펙트 배치. 인덱스 0 = 1콤보, 인덱스 1 = 2콤보. 배열 길이를 넘는 스텝은 마지막 값을 재사용한다. 위치/회전 모두 transform 기준 로컬 값이라 캐릭터가 왜쪽/오른쪽 어느 쪽을 보든 자동 반영된다.")]
+    [SerializeField]
+    private SlashEffectPose[] slashEffectPosesByComboStep =
+    {
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 0.65f, 1f), localEulerAngles = new Vector3(1f, 180f, 5f) }
+    };
+    [Tooltip("콤보 입력 시점부터 스래시 이펙트를 터뜨리까지의 지연 시간(초). 애니메이션 이벤트 대신 이 값으로 스윈 타이밍에 맞춰 튜닝한다.")]
+    [SerializeField] private float slashEffectTriggerDelay = 0.12f;
+
+    private const string SlashEffectKey = "Slash_Normal";
+    private const int SlashEffectPrewarmCount = 3;
+    private int pendingSlashEffectComboStep;
+
+
 
     private const string JumpClipName = "JumpFull_RM_NoWeapon";
     private const float FallbackJumpClipLength = 0.8f;
@@ -33,18 +56,17 @@ public class PlayerController : MonoBehaviour
 
     /// <summary>
     /// SingleSword 콤보 애니메이션 클립 이름(콤보 단계 순서). BasicCharacterStance의
-    /// Attack1/Attack2/Attack3 상태에 연결된 모션과 이름이 일치해야 한다.
+    /// Attack1/Attack2 상태에 연결된 모션과 이름이 일치해야 한다.
     /// 다른 무기 타입을 추가할 때는 이 배열과 같은 형태로 세트를 하나 더 만들면 된다.
     /// </summary>
     private static readonly string[] SingleSwordComboClipNames =
     {
         "Combo01_InPlace_SingleSword",
-        "Combo02_InPlace_SingleSword",
-        "Combo03_InPlace_SingleSword"
+        "Combo02_InPlace_SingleSword"
     };
 
     private const float FallbackComboClipLength = 0.6f;
-    private const int MaxComboStep = 3;
+    private const int MaxComboStep = 2;
 
     private static readonly int IsIdleHash = Animator.StringToHash(nameof(PlayerMoveState.IsIdle));
     private static readonly int IsMoveHash = Animator.StringToHash(nameof(PlayerMoveState.IsMove));
@@ -72,7 +94,7 @@ public class PlayerController : MonoBehaviour
     #endregion
 
     #region LifeCycle
-    private void Awake()
+private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
@@ -92,6 +114,8 @@ public class PlayerController : MonoBehaviour
             ApplyJumpAnimationSpeed();
             CacheComboClipLengths();
         }
+
+        ObjectPoolController.Instance?.Preload(SlashEffectKey, SlashEffectPrewarmCount);
     }
 
     private void Update()
@@ -375,6 +399,53 @@ private void UpdateCombo()
         comboStep = nextStep;
         comboWindowEndTime = Time.time + comboClipLengths[nextStep - 1];
         animator.SetInteger(ComboIndexHash, comboStep);
+
+        pendingSlashEffectComboStep = comboStep;
+        if (slashEffectTriggerDelay > 0f)
+        {
+            Invoke(nameof(PlayAttackSlashEffect), slashEffectTriggerDelay);
+        }
+        else
+        {
+            PlayAttackSlashEffect();
+        }
     }
     #endregion
+
+
+/// <summary>
+    /// 현재 캐릭터 앞쪽(rightFacingYRotation/leftFacingYRotation이 반영된 transform.rotation 기준)에
+    /// slashEffectLocalOffset만큼 띄운 위치에 풀링된 Slash_Normal 이펙트를 소환한다.
+    /// UpdateCombo에서 콤보 입력이 성공할 때마다 slashEffectTriggerDelay후 호출된다.
+    /// </summary>
+private void PlayAttackSlashEffect()
+    {
+        if (ObjectPoolController.Instance == null)
+        {
+            return;
+        }
+
+        SlashEffectPose pose = GetSlashEffectPose(pendingSlashEffectComboStep);
+
+        Vector3 spawnPosition = transform.TransformPoint(pose.localOffset);
+        Quaternion spawnRotation = transform.rotation * Quaternion.Euler(pose.localEulerAngles);
+
+        ObjectPoolController.Instance.Get(SlashEffectKey, spawnPosition, spawnRotation);
+    }
+
+
+/// <summary>
+    /// comboStepValue(1부터 시작)에 대응하는 스래시 이펙트 배치를 가져온다.
+    /// 배열 길이를 넘어서는 콤보 스텝은 마지막 값을 그대로 재사용한다.
+    /// </summary>
+    private SlashEffectPose GetSlashEffectPose(int comboStepValue)
+    {
+        if (slashEffectPosesByComboStep == null || slashEffectPosesByComboStep.Length == 0)
+        {
+            return default;
+        }
+
+        int index = Mathf.Clamp(comboStepValue - 1, 0, slashEffectPosesByComboStep.Length - 1);
+        return slashEffectPosesByComboStep[index];
+    }
 }
