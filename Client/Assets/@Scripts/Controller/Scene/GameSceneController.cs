@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
 {
@@ -13,6 +13,13 @@ public class GameSceneController : MonoBehaviour
     [Header("Dragon Spawn Settings")]
     [SerializeField] private Transform dragonSpawnPoint;
     [SerializeField] private Vector3 dragonSpawnOffset = new Vector3(-2f, 0f, 0f);
+
+    /// <summary>
+    /// 유저 캐릭터와 드래곤이 GameScene에 스폰될 때 공통으로 바라볼 초기 방향(Vector3.right).
+    /// PlayerController/DragonController의 오른쪽 이동 회전값(90도)과 동일하다.
+    /// </summary>
+    private static readonly Quaternion InitialFacingRotation = Quaternion.LookRotation(Vector3.right);
+
 
 
     private GameObject spawnedCharacter;
@@ -68,7 +75,7 @@ private void SpawnPlayerCharacter()
             }
 
             Vector3 spawnPosition = characterSpawnPoint != null ? characterSpawnPoint.position : defaultSpawnPosition;
-            Quaternion spawnRotation = characterSpawnPoint != null ? characterSpawnPoint.rotation : Quaternion.identity;
+            Quaternion spawnRotation = InitialFacingRotation;
 
             spawnedCharacter = AddressableAssetController.Instance.InstantiatePrefab(prefab);
             spawnedCharacter.name = "PlayerCharacter";
@@ -99,18 +106,12 @@ private void SpawnPlayerCharacter()
                 DebugLogController.GenerateErrorMessage<GameSceneController>("cameraZoomController가 지정되지 않아 카메라 추적을 설정할 수 없습니다.");
             }
 
-            // 이동/충돌은 Rigidbody + PlayerController가 물리적으로 처리하므로, Root Motion이 켜진 채로 두면
-            // 애니메이션(Idle 등)에 섞인 미세한 루트 모션이 그 위에 겹쳐져 위치가 어긋날 수 있다.
-            // Animator/Avatar 자체는 건드리지 않고 런타임에서만 비활성화한다.
             var animator = spawnedCharacter.GetComponent<Animator>();
             if (animator != null)
             {
                 animator.applyRootMotion = false;
             }
 
-            // SkinnedMeshRenderer는 기본적으로 바인드 포즈 기준으로 계산된 바운드를 캐싱해두기 때문에,
-            // 스폰 위치가 그 바운드 밖(카메라 프러스텀 판정 기준)이면 실제로는 보여야 할 메쉬가
-            // 컬링되어 안 보이는 경우가 있다. 매 프레임 바운드를 재계산하도록 강제해 이를 방지한다.
             var skinnedRenderers = spawnedCharacter.GetComponentsInChildren<SkinnedMeshRenderer>(true);
             for (int i = 0; i < skinnedRenderers.Length; i++)
             {
@@ -130,7 +131,7 @@ private void SpawnPlayerCharacter()
     /// dragonSpawnPoint(지정 시) 또는 characterSpawnPoint/defaultSpawnPosition 기준 오프셋으로
     /// 계산하므로 캐릭터 인스턴스가 먼저 준비될 필요는 없다.
     /// </summary>
-    private void SpawnPlayerDragon()
+private void SpawnPlayerDragon()
     {
         DragonSaveData dragonData = SaveDataController.Instance != null ? SaveDataController.Instance.CurrentData?.dragon : null;
 
@@ -162,10 +163,9 @@ private void SpawnPlayerCharacter()
             }
 
             Vector3 basePosition = characterSpawnPoint != null ? characterSpawnPoint.position : defaultSpawnPosition;
-            Quaternion baseRotation = characterSpawnPoint != null ? characterSpawnPoint.rotation : Quaternion.identity;
 
             Vector3 spawnPosition = dragonSpawnPoint != null ? dragonSpawnPoint.position : basePosition + dragonSpawnOffset;
-            Quaternion spawnRotation = dragonSpawnPoint != null ? dragonSpawnPoint.rotation : baseRotation;
+            Quaternion spawnRotation = InitialFacingRotation;
 
             spawnedDragon = AddressableAssetController.Instance.InstantiatePrefab(prefab);
             spawnedDragon.name = "PlayerDragon";
@@ -175,15 +175,12 @@ private void SpawnPlayerCharacter()
             TryWireDragonFollowTarget();
 
 
-            // 아직 별도의 이동 로직(Rigidbody 등)이 없으므로, Root Motion이 켜져 있으면
-            // 애니메이션에 섞인 미세한 이동이 스폰 위치를 어긋나게 할 수 있어 런타임에서 비활성화한다.
             var animator = spawnedDragon.GetComponent<Animator>();
             if (animator != null)
             {
                 animator.applyRootMotion = false;
             }
 
-            // 플레이어 캐릭터와 동일한 이유(오프스크린 컬링으로 인한 스킨드 메쉬 미표시 방지)로 강제 갱신한다.
             var skinnedRenderers = spawnedDragon.GetComponentsInChildren<SkinnedMeshRenderer>(true);
             for (int i = 0; i < skinnedRenderers.Length; i++)
             {
