@@ -45,6 +45,19 @@ public class PlayerController : MonoBehaviour
     private const int SlashEffectPrewarmCount = 3;
     private int pendingSlashEffectComboStep;
 
+    /// <summary>
+    /// D(속성베기) 스킬 사용 시, 이 시간 동안 기본 공격(콤보) 이펙트가 SlashFireForceEffectKey로 바뀓다.
+    /// </summary>
+    private const string SlashFireForceEffectKey = "SlashFireForce";
+    private const float FireForceBuffDuration = 8f;
+
+    /// <summary>
+    /// 기본 공격(콤보)이 실제로 사용하는 이펙트 키. 평소엔 SlashEffectKey이고, D 스킬 사용 직후
+    /// FireForceBuffDuration(8초) 동안만 SlashFireForceEffectKey로 바뀌었다가 자동으로 되돌아간다.
+    /// </summary>
+    private string currentComboEffectKey = SlashEffectKey;
+
+
     [Header("Skill VFX")]
     [Tooltip("스킬 슬롯(A/S/D/F 순서)별 이펙트 배치. 위치/회전 모두 transform 기준 로컬 값이라 캐릭터가 왜쪽/오른쪽 어느 쪽을 보든 자동 반영된다.")]
     [SerializeField]
@@ -57,8 +70,28 @@ public class PlayerController : MonoBehaviour
     };
     [Tooltip("스킬 시전 시점부터 이펙트를 터뜨리까지의 지연 시간(초).")]
     [SerializeField] private float skillEffectTriggerDelay = 0.12f;
+    [Tooltip("스킬 슬롯(A/S/D/F 순서)별로 사용할 이펙트의 Addressable 키. 기본은 콤보와 동일한 Slash_Normal이며, 슬롯마다 다른 이펙트를 쓰려면 값을 바꾸면 된다(단, 그 키가 Addressable로 등록되어 있어야 한다).")]
+    [SerializeField]
+    private string[] skillEffectKeysBySlot =
+    {
+        SlashEffectKey,
+        SlashEffectKey,
+        SlashEffectKey, // D: AttributeAssignmentEffect는 루프 파티클이라 풀링 대신 attributeAssignmentEffectInstance.SetActive로 별도 관리한다.
+        SlashEffectKey
+    };
+
 
     private UI_GameSceneView.PlayerSkillSlot pendingSkillSlot;
+
+    private const string AttributeAssignmentEffectKey = "AttributeAssignmentEffect";
+
+    /// <summary>
+    /// D(속성베기) 사용 중(FireForceBuffDuration 동안) 켜지는 지속형 오라 이펙트 인스턴스.
+    /// 파티클이 전부 looping이라 원샷 풀링(SpawnSlashEffect/ObjectPoolController)과 맞지 않아
+    /// 캐릭터 자식으로 한 번만 만들어두고 SetActive만 토글한다.
+    /// </summary>
+    private GameObject attributeAssignmentEffectInstance;
+
 
 
 
@@ -185,7 +218,8 @@ private void Awake()
             DebugLogController.GenerateErrorMessage<PlayerController>("KeyboardInputController.Instance가 없어 점프/공격 입력을 받을 수 없습니다.");
         }
 
-        ObjectPoolController.Instance?.Preload(SlashEffectKey, SlashEffectPrewarmCount);
+        PreloadEffectPools();
+        LoadAttributeAssignmentEffect();
     }
 
 private void OnDestroy()
@@ -482,7 +516,7 @@ private void UpdateCombo()
 private void PlayAttackSlashEffect()
     {
         SlashEffectPose pose = GetSlashEffectPose(pendingSlashEffectComboStep);
-        SpawnSlashEffect(pose);
+        SpawnSlashEffect(pose, currentComboEffectKey);
     }
 
 
@@ -605,18 +639,27 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
         animator.SetInteger(SkillIndexHash, index + 1);
         SetAttackLayerWeight(1f);
 
-        pendingSkillSlot = slot;
-        if (skillEffectTriggerDelay > 0f)
+        // D(속성베기)는 원샷 풀링 이펙트 대신 ActivateFireForceBuff가 켜는 지속형 오라(attributeAssignmentEffectInstance)를 쓰므로 여기서는 생략한다.
+        if (slot != UI_GameSceneView.PlayerSkillSlot.D)
         {
-            Invoke(nameof(PlaySkillSlashEffect), skillEffectTriggerDelay);
-        }
-        else
-        {
-            PlaySkillSlashEffect();
+            pendingSkillSlot = slot;
+            if (skillEffectTriggerDelay > 0f)
+            {
+                Invoke(nameof(PlaySkillSlashEffect), skillEffectTriggerDelay);
+            }
+            else
+            {
+                PlaySkillSlashEffect();
+            }
         }
 
         CancelInvoke(nameof(FinishSkillAnimation));
         Invoke(nameof(FinishSkillAnimation), skillAnimationDurations[index]);
+
+        if (slot == UI_GameSceneView.PlayerSkillSlot.D)
+        {
+            ActivateFireForceBuff();
+        }
     }
 
     /// <summary>
@@ -643,9 +686,9 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
     /// pose(로컬 오프셋/회전)를 캐릭터의 현재 transform 기준 월드 좌표로 변환해 풀링된 Slash_Normal
     /// 이펙트를 소환한다. 콤보 공격/스킬 이펙트가 공통으로 사용하는 실제 스폰 로직이다.
     /// </summary>
-    private void SpawnSlashEffect(SlashEffectPose pose)
+private void SpawnSlashEffect(SlashEffectPose pose, string effectKey)
     {
-        if (ObjectPoolController.Instance == null)
+        if (ObjectPoolController.Instance == null || string.IsNullOrEmpty(effectKey))
         {
             return;
         }
@@ -653,16 +696,17 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
         Vector3 spawnPosition = transform.TransformPoint(pose.localOffset);
         Quaternion spawnRotation = transform.rotation * Quaternion.Euler(pose.localEulerAngles);
 
-        ObjectPoolController.Instance.Get(SlashEffectKey, spawnPosition, spawnRotation);
+        ObjectPoolController.Instance.Get(effectKey, spawnPosition, spawnRotation);
     }
 
     /// <summary>
     /// pendingSkillSlot에 대응하는 이펙트를 소환한다. PlaySkillAnimation에서 skillEffectTriggerDelay 후 호출된다.
     /// </summary>
-    private void PlaySkillSlashEffect()
+private void PlaySkillSlashEffect()
     {
         SlashEffectPose pose = GetSkillEffectPose(pendingSkillSlot);
-        SpawnSlashEffect(pose);
+        string effectKey = GetSkillEffectKey(pendingSkillSlot);
+        SpawnSlashEffect(pose, effectKey);
     }
 
     /// <summary>
@@ -677,5 +721,113 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
 
         int index = Mathf.Clamp((int)slot, 0, skillEffectPosesBySlot.Length - 1);
         return skillEffectPosesBySlot[index];
+    }
+
+
+/// <summary>
+    /// slot(A/S/D/F)에 대응하는 이펙트 Addressable 키를 가져온다. 배열이 비어있거나 범위를 벗어나거나
+    /// 해당 원소가 비어있으면 콤보와 같은 SlashEffectKey(Slash_Normal)로 폴백한다.
+    /// </summary>
+    private string GetSkillEffectKey(UI_GameSceneView.PlayerSkillSlot slot)
+    {
+        if (skillEffectKeysBySlot == null || skillEffectKeysBySlot.Length == 0)
+        {
+            return SlashEffectKey;
+        }
+
+        int index = Mathf.Clamp((int)slot, 0, skillEffectKeysBySlot.Length - 1);
+        string key = skillEffectKeysBySlot[index];
+
+        return string.IsNullOrEmpty(key) ? SlashEffectKey : key;
+    }
+
+    /// <summary>
+    /// 콤보/스킬이 사용하는 모든 이펙트 풀을 Awake에서 미리 프리로드한다. skillEffectKeysBySlot이
+    /// 콤보와 다른 키로 바뀌어도(예: 속성별 이펙트) 첫 사용 시점에 "아직 로드 안 됨" 오류가 나지 않도록
+    /// 겹치지 않는 키만 모아 함께 프리로드한다.
+    /// </summary>
+private void PreloadEffectPools()
+    {
+        ObjectPoolController.Instance?.Preload(SlashEffectKey, SlashEffectPrewarmCount);
+        ObjectPoolController.Instance?.Preload(SlashFireForceEffectKey, SlashEffectPrewarmCount);
+
+        if (skillEffectKeysBySlot == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < skillEffectKeysBySlot.Length; i++)
+        {
+            string key = skillEffectKeysBySlot[i];
+            if (string.IsNullOrEmpty(key) || key == SlashEffectKey || key == SlashFireForceEffectKey)
+            {
+                continue;
+            }
+
+            ObjectPoolController.Instance?.Preload(key, SlashEffectPrewarmCount);
+        }
+    }
+
+
+/// <summary>
+    /// D(속성베기) 스킬 사용 시 호출된다. 기본 공격 이펙트를 SlashFireForceEffectKey로 바꾸고,
+    /// FireForceBuffDuration(8초) 후 자동으로 원래(SlashEffectKey)로 되돌린다. 재사용 시 기존
+    /// 타이머를 취소하고 새로 8초를 재장한다(중첩되지 않고 갱신된다).
+    /// </summary>
+private void ActivateFireForceBuff()
+    {
+        currentComboEffectKey = SlashFireForceEffectKey;
+
+        if (attributeAssignmentEffectInstance != null)
+        {
+            attributeAssignmentEffectInstance.SetActive(true);
+        }
+
+        CancelInvoke(nameof(DeactivateFireForceBuff));
+        Invoke(nameof(DeactivateFireForceBuff), FireForceBuffDuration);
+    }
+
+    /// <summary>FireForce 버프가 끝나면 기본 공격 이펙트를 원래(SlashEffectKey)로 되돌립다.</summary>
+private void DeactivateFireForceBuff()
+    {
+        currentComboEffectKey = SlashEffectKey;
+
+        if (attributeAssignmentEffectInstance != null)
+        {
+            attributeAssignmentEffectInstance.SetActive(false);
+        }
+    }
+
+
+/// <summary>
+    /// D 사용 중에만 켜지는 attributeAssignmentEffectInstance를 캐릭터 자식으로 미리 인스턴스화해둔다.
+    /// skillEffectPosesBySlot[D]와 같은 배치값을 쓰며, 비활성화 상태로 시작해 ActivateFireForceBuff가
+    /// 켜기 전까지는 보이지 않는다. 루프 파티클이라 풀링(SpawnSlashEffect)이 아니라
+    /// 인스턴스 하나를 계속 재사용(SetActive 토글)한다.
+    /// </summary>
+    private void LoadAttributeAssignmentEffect()
+    {
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<PlayerController>("AddressableAssetController.Instance가 없어 AttributeAssignmentEffect를 준비할 수 없습니다.");
+            return;
+        }
+
+        AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(AttributeAssignmentEffectKey, prefab =>
+        {
+            if (prefab == null || attributeAssignmentEffectInstance != null)
+            {
+                return;
+            }
+
+            attributeAssignmentEffectInstance = AddressableAssetController.Instance.InstantiatePrefab(prefab);
+            attributeAssignmentEffectInstance.transform.SetParent(transform, false);
+
+            SlashEffectPose pose = GetSkillEffectPose(UI_GameSceneView.PlayerSkillSlot.D);
+            attributeAssignmentEffectInstance.transform.localPosition = pose.localOffset;
+            attributeAssignmentEffectInstance.transform.localRotation = Quaternion.Euler(pose.localEulerAngles);
+
+            attributeAssignmentEffectInstance.SetActive(false);
+        });
     }
 }

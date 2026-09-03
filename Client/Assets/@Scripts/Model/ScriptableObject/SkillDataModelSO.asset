@@ -22,9 +22,9 @@ MonoBehaviour:
     cooldown: 5
     damage: 20
   - slot: 2
-    skillName: "\uC18D\uC131\uBCA0\uAE30"
-    cooldown: 6
-    damage: 25
+    skillName: "\uC18D\uC131\uBD80\uC5EC"
+    cooldown: 10
+    damage: 0
   - slot: 3
     skillName: "\uD68C\uC804\uBCA0\uAE30"
     cooldown: 8
