@@ -1,4 +1,4 @@
-﻿public enum AddressableKey
+public enum AddressableKey
 {
     None,
     UI_ProgressBar,
@@ -11,7 +11,8 @@
     TileFloor,
     TileRockFloor,
     TileStairs,
-    SlashNormal
+    SlashNormal,
+    SkillDataModelSO
 }
 
 public enum DragonType

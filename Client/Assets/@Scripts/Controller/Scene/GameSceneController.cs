@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
 {
+
+
+
     #region Variable
     [Header("Camera Settings")]
     [SerializeField] private CameraZoomController cameraZoomController;
@@ -29,6 +32,16 @@ public class GameSceneController : MonoBehaviour
 
 
     private UI_GameSceneView gameSceneView;
+
+    [Header("Player Skill Data")]
+    [Tooltip("A/S/D/F 스킬(이름/쿸타임/데미지) 데이터. Addressable로 로드되며 Inspector에서 직접 드래그할 필요는 없다.")]
+    private SkillDataModelSO skillDataModel;
+
+
+    private KeyboardInputController spawnedKeyboardInput;
+    private PlayerController spawnedPlayerController;
+
+
     private PlayerCharacterModel spawnedCharacterModel;
     private UserSaveData cachedUserData;
     #endregion
@@ -39,7 +52,17 @@ private void Start()
         SpawnPlayerCharacter();
         SpawnPlayerDragon();
         LoadGameSceneUI();
+        LoadSkillData();
     }
+
+private void OnDestroy()
+    {
+        if (spawnedKeyboardInput != null)
+        {
+            spawnedKeyboardInput.OnSkillKeyPressed -= HandleSkillKeyPressed;
+        }
+    }
+
     #endregion
 
     #region Method
@@ -93,13 +116,20 @@ private void SpawnPlayerCharacter()
             TryBindGameSceneView();
             TryWireDragonFollowTarget();
 
+            // KeyboardInputController(SingletonObject)를 PlayerController보다 먼저 붙여, PlayerController.Awake()가
+            // KeyboardInputController.Instance를 처음 참조할 때 이미 이 캐릭터에 붙은 인스턴스를 쓰도록 한다.
+            // 순서가 바끈면(PlayerController 먼저) SingletonObject가 별도의 익명 GameObject를 먼저 만들어버리고,
+            // 이후 여기서 AddComponent한 두 번째 인스턴스가 SingletonObject.Awake에서 자기 자신(spawnedCharacter)을 파괴해버린다.
+            spawnedCharacter.AddComponent<KeyboardInputController>();
+            spawnedKeyboardInput = spawnedCharacter.GetComponent<KeyboardInputController>();
+            spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
 
             SetupPhysics(spawnedCharacter);
-            var playerController = spawnedCharacter.AddComponent<PlayerController>();
+            spawnedPlayerController = spawnedCharacter.AddComponent<PlayerController>();
 
             if (cameraZoomController != null)
             {
-                cameraZoomController.SetTarget(playerController);
+                cameraZoomController.SetTarget(spawnedPlayerController);
             }
             else
             {
@@ -213,6 +243,33 @@ private void LoadGameSceneUI()
         });
     }
 
+/// <summary>
+    /// 플레이어 스킬(A/S/D/F) 데이터(스킬명/쿸타임/데미지)를 담은 SkillDataModelSO를 Addressable로 로드한다.
+    /// 캐릭터 스폰과는 독립적인 비동기 로드이며, 로드가 끝나기 전에 스킬 키가 눌리면 해당 입력은 무시된다.
+    /// </summary>
+    private void LoadSkillData()
+    {
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("AddressableAssetController.Instance가 없어 스킬 데이터를 로드할 수 없습니다.");
+            return;
+        }
+
+        string key = AddressableKey.SkillDataModelSO.ToString();
+
+        AddressableAssetController.Instance.LoadPrefabAddress<SkillDataModelSO>(key, so =>
+        {
+            if (so == null)
+            {
+                DebugLogController.GenerateErrorMessage<GameSceneController>($"스킬 데이터 로드 실패 Key : {key}");
+                return;
+            }
+
+            skillDataModel = so;
+        });
+    }
+
+
     /// <summary>
     /// 캐릭터 스폰과 UI 로드가 둘 다 끝났을 때만 실제 바인딩을 수행한다.
     /// 어느 쪽이 먼저 끝나도 동작하도록 양쪽 완료 콜백에서 이 메서드를 호출한다.
@@ -260,4 +317,35 @@ private void LoadGameSceneUI()
         rigidbody.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
     }
     #endregion
+
+
+/// <summary>
+    /// KeyboardInputController에서 A/S/D/F 스킬 키가 눌렸을 때 호출된다. UI_GameSceneView의
+    /// 쿸타임 기능을 호출해 해당 슬롯을 쿸타임 상태로 전환한다(실제 스킬 효과/데미지는 아직 없다).
+    /// </summary>
+private void HandleSkillKeyPressed(UI_GameSceneView.PlayerSkillSlot slot)
+    {
+        if (gameSceneView == null)
+        {
+            return;
+        }
+
+        SkillData skill = skillDataModel != null ? skillDataModel.GetSkill(slot) : null;
+        if (skill == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>($"슬롯 {slot}에 대응하는 스킬 데이터를 찾을 수 없습니다.");
+            return;
+        }
+
+        bool started = gameSceneView.TryStartPlayerSkillCooldown(slot, skill.cooldown);
+        if (!started)
+        {
+            return;
+        }
+
+        spawnedPlayerController?.PlaySkillAnimation(slot);
+
+        DebugLogController.GenerateLogMessage<GameSceneController>(
+            $"스킬 사용: {skill.skillName} (슬롯:{slot}, 데미지:{skill.damage}, 쿸타임:{skill.cooldown}초)");
+    }
 }

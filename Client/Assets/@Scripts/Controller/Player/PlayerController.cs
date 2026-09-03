@@ -1,13 +1,12 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 /// <summary>
-/// 키보드 좌우 화살표 입력을 받아 Rigidbody를 통해 캐릭터를 X축으로 이동시킨다.
+/// KeyboardInputController로부터 좌우 이동 축과 점프/공격 이벤트를 받아 Rigidbody를 통해 캐릭터를 X축으로 이동시킨다.
 /// 중력/충돌은 Rigidbody가 처리하므로, Y·Z는 건드리지 않고 X 속도만 제어한다.
 /// 좌우 입력 방향에 맞춰 캐릭터가 해당 방향을 바라보도록 Y축 회전도 함께 갱신하고,
 /// PlayerMoveState(IsIdle/IsMove)와 IsJump에 따라 BasicCharacterStance Animator 파라미터를 갱신한다.
 /// SpaceBar 입력 시 접지 상태에서만 위로 속도를 부여해 중력에 의한 포물선 점프를 만든다.
-/// F 입력 시 PlayerCharacterModel에 장착된 무기 타입에 맞는 콤보 공격을 진행한다.
+/// C키 입력 시 PlayerCharacterModel에 장착된 무기 타입에 맞는 콤보 공격을 진행한다.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerController : MonoBehaviour
@@ -46,6 +45,22 @@ public class PlayerController : MonoBehaviour
     private const int SlashEffectPrewarmCount = 3;
     private int pendingSlashEffectComboStep;
 
+    [Header("Skill VFX")]
+    [Tooltip("스킬 슬롯(A/S/D/F 순서)별 이펙트 배치. 위치/회전 모두 transform 기준 로컬 값이라 캐릭터가 왜쪽/오른쪽 어느 쪽을 보든 자동 반영된다.")]
+    [SerializeField]
+    private SlashEffectPose[] skillEffectPosesBySlot =
+    {
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) }
+    };
+    [Tooltip("스킬 시전 시점부터 이펙트를 터뜨리까지의 지연 시간(초).")]
+    [SerializeField] private float skillEffectTriggerDelay = 0.12f;
+
+    private UI_GameSceneView.PlayerSkillSlot pendingSkillSlot;
+
+
 
 
     private const string JumpClipName = "JumpFull_RM_NoWeapon";
@@ -73,6 +88,39 @@ public class PlayerController : MonoBehaviour
     private static readonly int IsJumpHash = Animator.StringToHash(nameof(PlayerMoveState.IsJump));
     private static readonly int JumpSpeedHash = Animator.StringToHash("JumpSpeed");
     private static readonly int ComboIndexHash = Animator.StringToHash("ComboIndex");
+    private static readonly int SkillIndexHash = Animator.StringToHash("SkillIndex");
+
+    /// <summary>
+    /// A/S/D/F 스킬 애니메이션이 재생 중인지 여부. 콤보 공격과 스킬은 같은 Attack Layer를 공유하므로
+    /// 서로 동시에 진입하지 못하도록 이 플래그와 comboStep으로 상호 배제한다.
+    /// </summary>
+    private bool isSkillPlaying;
+
+    /// <summary>
+    /// A(찌르기)/D(속성베기)/F(회전베기)는 단일 클립, S(삼단베기)는 Combo01~03을 순차
+    /// 재생하므로 세 클립 길이의 합을 총 재생 시간으로 캩0싱해둔다. 인덱스는 UI_GameSceneView.PlayerSkillSlot과 일치한다.
+    /// </summary>
+    private const string SwordPierceClipName = "Combo03_InPlace_SingleSword";
+    private const string AttributeAssignmentClipName = "Defend_SingleSword";
+    private const string WheelwindClipName = "Combo04_InPlace_SingleSword";
+    private static readonly string[] TripleSlashClipNames =
+    {
+        "Combo01_InPlace_SingleSword",
+        "Combo02_InPlace_SingleSword",
+        "Combo03_InPlace_SingleSword"
+    };
+
+    private const float FallbackSkillClipLength = 0.6f;
+    private readonly float[] skillAnimationDurations = new float[4];
+
+
+    /// <summary>
+    /// 공격 모션(Attack1/Attack2)이 위치한 BasicCharacterStance의 별도 레이어 이름.
+    /// 평소엔 weight 0으로 까거져 있다가, 콤보 중(comboStep > 0)에만 1로 켜서 공격 모션이 보이도록 한다.
+    /// </summary>
+    private const string AttackLayerName = "Attack Layer";
+    private int attackLayerIndex = -1;
+
 
     private Rigidbody rb;
     private Animator animator;
@@ -86,6 +134,11 @@ public class PlayerController : MonoBehaviour
     private int comboStep;
     private float comboWindowEndTime;
     private readonly float[] comboClipLengths = new float[MaxComboStep];
+
+    [Tooltip("마지막 콤보 단계(MaxComboStep) 공격 이후, 새 콤보를 다시 시작할 수 있을 때까지의 대기 시간(초).")]
+    [SerializeField] private float postComboLockoutDuration = 1f;
+    private float postComboLockoutEndTime;
+
     #endregion
 
     #region Property
@@ -113,48 +166,57 @@ private void Awake()
         {
             ApplyJumpAnimationSpeed();
             CacheComboClipLengths();
+            CacheSkillAnimationDurations();
+
+            attackLayerIndex = animator.GetLayerIndex(AttackLayerName);
+            if (attackLayerIndex < 0)
+            {
+                DebugLogController.GenerateErrorMessage<PlayerController>($"Animator에 '{AttackLayerName}' 레이어가 없어 공격 모션이 표시되지 않을 수 있습니다.");
+            }
+        }
+
+        if (KeyboardInputController.Instance != null)
+        {
+            KeyboardInputController.Instance.OnJumpPressed += HandleJumpPressed;
+            KeyboardInputController.Instance.OnAttackPressed += HandleAttackPressed;
+        }
+        else
+        {
+            DebugLogController.GenerateErrorMessage<PlayerController>("KeyboardInputController.Instance가 없어 점프/공격 입력을 받을 수 없습니다.");
         }
 
         ObjectPoolController.Instance?.Preload(SlashEffectKey, SlashEffectPrewarmCount);
     }
 
-    private void Update()
+private void OnDestroy()
     {
-        // FixedUpdate보다 프레임이 더 자주 도는 Update에서 눌림을 감지해 다음 FixedUpdate까지 요청을 보관한다.
-        // FixedUpdate에서만 폴링하면 짧게 누른 입력이 프레임 사이에 씹힐 수 있다.
-        if (Keyboard.current == null)
+        if (KeyboardInputController.Instance != null)
         {
-            return;
-        }
-
-        if (Keyboard.current.spaceKey.wasPressedThisFrame)
-        {
-            jumpRequested = true;
-        }
-
-        if (Keyboard.current.fKey.wasPressedThisFrame)
-        {
-            attackRequested = true;
+            KeyboardInputController.Instance.OnJumpPressed -= HandleJumpPressed;
+            KeyboardInputController.Instance.OnAttackPressed -= HandleAttackPressed;
         }
     }
 
-    private void FixedUpdate()
+
+
+
+private void FixedUpdate()
     {
-        float direction = GetHorizontalInput();
+        float direction = KeyboardInputController.Instance != null ? KeyboardInputController.Instance.MoveAxis : 0f;
 
         isGrounded = CheckGrounded();
 
         Vector3 velocity = rb.linearVelocity;
-        // 콤보 공격 중에는 제자리에서 휘두르는 모션(_InPlace_)이므로 좌우 이동을 멈춘다.
-        velocity.x = comboStep > 0 ? 0f : direction * moveSpeed;
+        // 콤보 공격/스킬 재생 중에는 제자리에서 동작하는 모션이므로 좌우 이동을 멈추다.
+        velocity.x = (comboStep > 0 || isSkillPlaying) ? 0f : direction * moveSpeed;
 
         if (jumpRequested)
         {
             jumpRequested = false;
 
-            // 콤보 공격 중에는 점프를 막아 Attack 상태와 Jump 상태가 동시에 요구되는
+            // 콤보 공격/스킬 중에는 점프를 막아 Attack 상태와 Jump 상태가 동시에 요구되는
             // 상황(애니메이터 충돌) 자체가 생기지 않도록 한다.
-            if (isGrounded && comboStep == 0)
+            if (isGrounded && comboStep == 0 && !isSkillPlaying)
             {
                 velocity.y = jumpForce;
                 isGrounded = false;
@@ -171,28 +233,7 @@ private void Awake()
     #endregion
 
     #region Method
-    private static float GetHorizontalInput()
-    {
-        Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
-        {
-            return 0f;
-        }
 
-        float direction = 0f;
-
-        if (keyboard.leftArrowKey.isPressed)
-        {
-            direction -= 1f;
-        }
-
-        if (keyboard.rightArrowKey.isPressed)
-        {
-            direction += 1f;
-        }
-
-        return direction;
-    }
 
     /// <summary>
     /// 캐릭터 발 위치(로컬 y=0) 바로 위에서 아래로 짧게 Raycast를 쏴 접지 여부를 판정한다.
@@ -344,7 +385,7 @@ private void Awake()
     }
 
     /// <summary>
-    /// F 입력을 콤보 단계(ComboIndex)로 변환한다.
+    /// C키 입력을 콤보 단계(ComboIndex)로 변환한다.
     /// - 대기 중(comboStep == 0)이고 접지 상태일 때만 콤보를 시작한다.
     /// - 콤보 진행 중 다음 입력이 현재 단계의 유예 시간(comboWindowEndTime) 안에 들어오면 다음 단계로 이어간다.
     /// - 유예 시간을 넘기면 자동으로 대기 상태로 되돌아간다(ComboIndex = 0).
@@ -362,6 +403,17 @@ private void UpdateCombo()
         {
             comboStep = 0;
             animator.SetInteger(ComboIndexHash, 0);
+
+            if (!isSkillPlaying)
+            {
+                SetAttackLayerWeight(0f);
+            }
+
+            // 리셋 직후 같은 프레임에서 곰바로 새 콤보를 시작하면 Animator가 ComboIndex의
+            // 변화(예: 1 -> 0 -> 1)를 감지하지 못해 공격 이펙트는 나오지만 애니메이션은
+            // 재생되지 않는 문제가 있었다. 리셋과 신규 공격 판정 사이에 최소 한 프레임을 두어
+            // (attackRequested는 그대로 유지되므로 다음 FixedUpdate에서 정상 처리된다) 이 문제를 막는다.
+            return;
         }
 
         if (!attackRequested)
@@ -380,7 +432,9 @@ private void UpdateCombo()
         int nextStep;
         if (comboStep == 0)
         {
-            if (!isGrounded)
+            // 마지막 콤보 공격 직후에는 postComboLockoutEndTime까지 새 콤보를 다시 시작할 수 없고,
+            // 스킬(A/S/D/F)이 재생 중일 때도 같은 Attack Layer를 쓰므로 콤보를 시작하지 않는다.
+            if (!isGrounded || Time.time < postComboLockoutEndTime || isSkillPlaying)
             {
                 return;
             }
@@ -398,7 +452,14 @@ private void UpdateCombo()
 
         comboStep = nextStep;
         comboWindowEndTime = Time.time + comboClipLengths[nextStep - 1];
+
+        if (nextStep == MaxComboStep)
+        {
+            postComboLockoutEndTime = comboWindowEndTime + postComboLockoutDuration;
+        }
+
         animator.SetInteger(ComboIndexHash, comboStep);
+        SetAttackLayerWeight(1f);
 
         pendingSlashEffectComboStep = comboStep;
         if (slashEffectTriggerDelay > 0f)
@@ -420,17 +481,8 @@ private void UpdateCombo()
     /// </summary>
 private void PlayAttackSlashEffect()
     {
-        if (ObjectPoolController.Instance == null)
-        {
-            return;
-        }
-
         SlashEffectPose pose = GetSlashEffectPose(pendingSlashEffectComboStep);
-
-        Vector3 spawnPosition = transform.TransformPoint(pose.localOffset);
-        Quaternion spawnRotation = transform.rotation * Quaternion.Euler(pose.localEulerAngles);
-
-        ObjectPoolController.Instance.Get(SlashEffectKey, spawnPosition, spawnRotation);
+        SpawnSlashEffect(pose);
     }
 
 
@@ -447,5 +499,183 @@ private void PlayAttackSlashEffect()
 
         int index = Mathf.Clamp(comboStepValue - 1, 0, slashEffectPosesByComboStep.Length - 1);
         return slashEffectPosesByComboStep[index];
+    }
+
+
+/// <summary>
+    /// BasicCharacterStance의 Attack Layer weight를 설정한다. 공격 중에만 1로 켜서 Attack1/Attack2
+    /// 모션이 Base Layer(Idle/Move/Jump) 위에 덮여율게 하고, 평소엔 0으로 되돌려 Base Layer만 보인다.
+    /// </summary>
+    private void SetAttackLayerWeight(float weight)
+    {
+        if (animator == null || attackLayerIndex < 0)
+        {
+            return;
+        }
+
+        animator.SetLayerWeight(attackLayerIndex, weight);
+    }
+
+
+/// <summary>KeyboardInputController의 점프 입력 이벤트 핸들러. 다음 FixedUpdate에서 처리되도록 요청만 기록한다.</summary>
+    private void HandleJumpPressed()
+    {
+        jumpRequested = true;
+    }
+
+    /// <summary>KeyboardInputController의 공격 입력 이벤트 핸들러. 다음 FixedUpdate에서 처리되도록 요청만 기록한다.</summary>
+    private void HandleAttackPressed()
+    {
+        attackRequested = true;
+    }
+
+
+/// <summary>
+    /// A/D/F 스킬 클립 길이와, S(삼단베기)를 구성하는 Combo01~03 클립 길이의 합을 미리 읽어둔다.
+    /// 이 값만큼 뒤에 SkillIndex를 0으로 되돌려 애니메이션이 끝나는 시점과 맞춘다.
+    /// </summary>
+    private void CacheSkillAnimationDurations()
+    {
+        for (int i = 0; i < skillAnimationDurations.Length; i++)
+        {
+            skillAnimationDurations[i] = FallbackSkillClipLength;
+        }
+
+        if (animator.runtimeAnimatorController == null)
+        {
+            return;
+        }
+
+        float tripleSlashTotal = 0f;
+
+        foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
+        {
+            if (clip == null)
+            {
+                continue;
+            }
+
+            if (clip.name == SwordPierceClipName)
+            {
+                skillAnimationDurations[(int)UI_GameSceneView.PlayerSkillSlot.A] = clip.length;
+            }
+            else if (clip.name == AttributeAssignmentClipName)
+            {
+                skillAnimationDurations[(int)UI_GameSceneView.PlayerSkillSlot.D] = clip.length;
+            }
+            else if (clip.name == WheelwindClipName)
+            {
+                skillAnimationDurations[(int)UI_GameSceneView.PlayerSkillSlot.F] = clip.length;
+            }
+
+            for (int i = 0; i < TripleSlashClipNames.Length; i++)
+            {
+                if (clip.name == TripleSlashClipNames[i])
+                {
+                    tripleSlashTotal += clip.length;
+                }
+            }
+        }
+
+        if (tripleSlashTotal > 0f)
+        {
+            skillAnimationDurations[(int)UI_GameSceneView.PlayerSkillSlot.S] = tripleSlashTotal;
+        }
+    }
+
+    /// <summary>
+    /// slot에 해당하는 스킬 애니메이션을 BasicCharacterStance의 Attack Layer에서 재생한다.
+    /// 콤보 공격 중이거나 이미 다른 스킬이 재생 중이면 무시한다(같은 레이어를 공유하므로 상호 배제).
+    /// GameSceneController가 UI_GameSceneView.TryStartPlayerSkillCooldown이 성공했을 때만 호출한다.
+    /// </summary>
+public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
+    {
+        if (animator == null || comboStep > 0 || isSkillPlaying)
+        {
+            return;
+        }
+
+        int index = (int)slot;
+        if (index < 0 || index >= skillAnimationDurations.Length)
+        {
+            return;
+        }
+
+        isSkillPlaying = true;
+        animator.SetInteger(SkillIndexHash, index + 1);
+        SetAttackLayerWeight(1f);
+
+        pendingSkillSlot = slot;
+        if (skillEffectTriggerDelay > 0f)
+        {
+            Invoke(nameof(PlaySkillSlashEffect), skillEffectTriggerDelay);
+        }
+        else
+        {
+            PlaySkillSlashEffect();
+        }
+
+        CancelInvoke(nameof(FinishSkillAnimation));
+        Invoke(nameof(FinishSkillAnimation), skillAnimationDurations[index]);
+    }
+
+    /// <summary>
+    /// 스킬 애니메이션 재생이 끝난 뒤 SkillIndex를 0으로 되돌려 AttackLayerIdle로 복귀시키고,
+    /// 콤보가 진행 중이 아니면 Attack Layer weight도 0으로 되돌린다.
+    /// </summary>
+    private void FinishSkillAnimation()
+    {
+        isSkillPlaying = false;
+
+        if (animator != null)
+        {
+            animator.SetInteger(SkillIndexHash, 0);
+        }
+
+        if (comboStep == 0)
+        {
+            SetAttackLayerWeight(0f);
+        }
+    }
+
+
+/// <summary>
+    /// pose(로컬 오프셋/회전)를 캐릭터의 현재 transform 기준 월드 좌표로 변환해 풀링된 Slash_Normal
+    /// 이펙트를 소환한다. 콤보 공격/스킬 이펙트가 공통으로 사용하는 실제 스폰 로직이다.
+    /// </summary>
+    private void SpawnSlashEffect(SlashEffectPose pose)
+    {
+        if (ObjectPoolController.Instance == null)
+        {
+            return;
+        }
+
+        Vector3 spawnPosition = transform.TransformPoint(pose.localOffset);
+        Quaternion spawnRotation = transform.rotation * Quaternion.Euler(pose.localEulerAngles);
+
+        ObjectPoolController.Instance.Get(SlashEffectKey, spawnPosition, spawnRotation);
+    }
+
+    /// <summary>
+    /// pendingSkillSlot에 대응하는 이펙트를 소환한다. PlaySkillAnimation에서 skillEffectTriggerDelay 후 호출된다.
+    /// </summary>
+    private void PlaySkillSlashEffect()
+    {
+        SlashEffectPose pose = GetSkillEffectPose(pendingSkillSlot);
+        SpawnSlashEffect(pose);
+    }
+
+    /// <summary>
+    /// slot(A/S/D/F)에 대응하는 스킬 이펙트 배치를 가져온다. 배열 범위를 벗어나면 마지막 값을 재사용한다.
+    /// </summary>
+    private SlashEffectPose GetSkillEffectPose(UI_GameSceneView.PlayerSkillSlot slot)
+    {
+        if (skillEffectPosesBySlot == null || skillEffectPosesBySlot.Length == 0)
+        {
+            return default;
+        }
+
+        int index = Mathf.Clamp((int)slot, 0, skillEffectPosesBySlot.Length - 1);
+        return skillEffectPosesBySlot[index];
     }
 }
