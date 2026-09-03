@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
 {
@@ -10,7 +10,16 @@ public class GameSceneController : MonoBehaviour
     [SerializeField] private Transform characterSpawnPoint;
     [SerializeField] private Vector3 defaultSpawnPosition = Vector3.zero;
 
+    [Header("Dragon Spawn Settings")]
+    [SerializeField] private Transform dragonSpawnPoint;
+    [SerializeField] private Vector3 dragonSpawnOffset = new Vector3(-2f, 0f, 0f);
+
+
     private GameObject spawnedCharacter;
+    private GameObject spawnedDragon;
+    private DragonController spawnedDragonController;
+
+
 
     private UI_GameSceneView gameSceneView;
     private PlayerCharacterModel spawnedCharacterModel;
@@ -18,9 +27,10 @@ public class GameSceneController : MonoBehaviour
     #endregion
 
     #region LifeCycle
-    private void Start()
+private void Start()
     {
         SpawnPlayerCharacter();
+        SpawnPlayerDragon();
         LoadGameSceneUI();
     }
     #endregion
@@ -74,6 +84,8 @@ private void SpawnPlayerCharacter()
             spawnedCharacterModel = characterModel;
             cachedUserData = userData;
             TryBindGameSceneView();
+            TryWireDragonFollowTarget();
+
 
             SetupPhysics(spawnedCharacter);
             var playerController = spawnedCharacter.AddComponent<PlayerController>();
@@ -110,6 +122,80 @@ private void SpawnPlayerCharacter()
         });
     }
 
+/// <summary>
+    /// 유저 캐릭터와 함께 등장하는 드래곤 동료(BasicDragon)를 스폰한다.
+    /// 캐릭터 생성 시 LobbySceneController가 항상 DragonSaveData를 함께 저장하므로,
+    /// 세이브된 캐릭터가 있다면 드래곤도 항상 존재한다는 전제로 동작한다.
+    /// SpawnPlayerCharacter와는 독립적인 비동기 Addressable 로드이며, 스폰 위치는
+    /// dragonSpawnPoint(지정 시) 또는 characterSpawnPoint/defaultSpawnPosition 기준 오프셋으로
+    /// 계산하므로 캐릭터 인스턴스가 먼저 준비될 필요는 없다.
+    /// </summary>
+    private void SpawnPlayerDragon()
+    {
+        DragonSaveData dragonData = SaveDataController.Instance != null ? SaveDataController.Instance.CurrentData?.dragon : null;
+
+        if (dragonData == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("저장된 드래곤 데이터가 없어 드래곤을 스폰할 수 없습니다.");
+            return;
+        }
+
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("AddressableAssetController.Instance가 없어 드래곤을 스폰할 수 없습니다.");
+            return;
+        }
+
+        string key = AddressableKey.BasicDragon.ToString();
+
+        AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(key, prefab =>
+        {
+            if (prefab == null)
+            {
+                DebugLogController.GenerateErrorMessage<GameSceneController>($"드래곤 프리팹 로드 실패 Key : {key}");
+                return;
+            }
+
+            if (spawnedDragon != null)
+            {
+                return;
+            }
+
+            Vector3 basePosition = characterSpawnPoint != null ? characterSpawnPoint.position : defaultSpawnPosition;
+            Quaternion baseRotation = characterSpawnPoint != null ? characterSpawnPoint.rotation : Quaternion.identity;
+
+            Vector3 spawnPosition = dragonSpawnPoint != null ? dragonSpawnPoint.position : basePosition + dragonSpawnOffset;
+            Quaternion spawnRotation = dragonSpawnPoint != null ? dragonSpawnPoint.rotation : baseRotation;
+
+            spawnedDragon = AddressableAssetController.Instance.InstantiatePrefab(prefab);
+            spawnedDragon.name = "PlayerDragon";
+            spawnedDragon.transform.SetPositionAndRotation(spawnPosition, spawnRotation);
+
+            spawnedDragonController = spawnedDragon.GetComponent<DragonController>();
+            TryWireDragonFollowTarget();
+
+
+            // 아직 별도의 이동 로직(Rigidbody 등)이 없으므로, Root Motion이 켜져 있으면
+            // 애니메이션에 섞인 미세한 이동이 스폰 위치를 어긋나게 할 수 있어 런타임에서 비활성화한다.
+            var animator = spawnedDragon.GetComponent<Animator>();
+            if (animator != null)
+            {
+                animator.applyRootMotion = false;
+            }
+
+            // 플레이어 캐릭터와 동일한 이유(오프스크린 컬링으로 인한 스킨드 메쉬 미표시 방지)로 강제 갱신한다.
+            var skinnedRenderers = spawnedDragon.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            for (int i = 0; i < skinnedRenderers.Length; i++)
+            {
+                skinnedRenderers[i].updateWhenOffscreen = true;
+            }
+
+            DebugLogController.GenerateLogMessage<GameSceneController>(
+                $"드래곤 스폰 완료: {dragonData.dragonID} (Lv.{dragonData.dragonLevel})");
+        });
+    }
+
+
     /// <summary>
     /// UI_GameScene(닉네임/HP/EXP 표시)을 Addressable로 로드해 인스턴스화한다.
     /// 캐릭터 스폰과 별개의 비동기 로드라 완료 순서가 보장되지 않으므로,
@@ -143,6 +229,22 @@ private void LoadGameSceneUI()
 
         gameSceneView.Bind(cachedUserData, spawnedCharacterModel);
     }
+
+/// <summary>
+    /// 캐릭터와 드래곤 스폰(둘 다 독립적인 비동기 Addressable 로드)이 모두 끝난 경우에만
+    /// 드래곤의 추적 대상을 유저 캐릭터로 연결한다. 어느 쪽이 먼저 끝나도 동작하도록
+    /// 양쪽 완료 콜백에서 이 메서드를 호출한다.
+    /// </summary>
+    private void TryWireDragonFollowTarget()
+    {
+        if (spawnedDragonController == null || spawnedCharacter == null)
+        {
+            return;
+        }
+
+        spawnedDragonController.SetFollowTarget(spawnedCharacter.transform);
+    }
+
 
     /// <summary>
     /// MapTile(BoxCollider) 지형과 충돌할 수 있도록 Rigidbody/CapsuleCollider를 부착한다.

@@ -5,6 +5,7 @@
     UI_LobbyScene,
     UI_GameScene,
     BasicCharacter,
+    BasicDragon,
     Tile001,
     Tile002,
     TileFloor,
@@ -26,6 +27,14 @@ public enum DragonElement
 }
 
 public enum PlayerMoveState
+{
+    IsIdle,
+    IsMove,
+    IsDash,
+    IsJump
+}
+
+public enum DragonMoveState
 {
     IsIdle,
     IsMove,
