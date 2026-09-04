@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// 유저 캐릭터를 따라다니는 드래곤 동료의 이동/애니메이션을 담당한다.
@@ -48,8 +48,34 @@ public class DragonController : MonoBehaviour
     /// 공격 모션이 위치한 BasicDragonStance의 별도 레이어 이름. 평소엔 weight 0으로 꺼져 있다가,
     /// 스킬 재생 중에만 1로 켜서 애니메이션이 보이도록 한다.
     /// </summary>
-    private const string AttackLayerName = "Attack Layer";
+private const string AttackLayerName = "Attack Layer";
     private int attackLayerIndex = -1;
+
+    [Header("Ranged Skill VFX")]
+    [Tooltip("스킬 시전 시점부터 원거리 이펙트를 실제로 터뜨리까지의 지연 시간(초).")]
+    [SerializeField] private float skillEffectTriggerDelay = 0.12f;
+
+    [Tooltip("Q(파이어볼) 투사체가 소환되는 캐릭터 기준 로컬 오프셋(입 위치).")]
+    [SerializeField] private Vector3 fireballMuzzleLocalOffset = new Vector3(1f, 0.5f, 0f);
+    [Tooltip("Q(파이어볼) 투사체의 이동 속도(초당 거리).")]
+    [SerializeField] private float fireballSpeed = 7.5f;
+    [Tooltip("Q(파이어볼)이 날아가는 최대 사거리. 이 거리에 도달하면 투사체가 사라진다.")]
+    [SerializeField] private float fireballRange = 6f;
+
+    [Tooltip("R(메테오 스트라이크)가 떨어지는 지점까지의, 캐릭터 기준 전방 거리.")]
+    [SerializeField] private float meteorStrikeRange = 5.5f;
+    [Tooltip("R(메테오 스트라이크) 이펙트가 소환되는 지점의 높이(Y) 보정값. 양수일수록 더 높은 곳에서 떨어진다.")]
+    [SerializeField] private float meteorStrikeHeightOffset = -1f;
+
+    /// <summary>
+    /// FireBall/MeteoStrike 프리팝이 실제 등록된 Addressable 주소. AddressableAssetsData/AssetGroups에
+    /// 미리 등록된 값을 그대로 사용한다.
+    /// </summary>
+    private const string FireballEffectKey = "FireBall";
+    private const string MeteorStrikeEffectKey = "MeteoStrike";
+    private const int RangedSkillPrewarmCount = 2;
+
+    private DragonSkillSlot pendingSkillSlot;
 
     private Animator animator;
     private Transform followTarget;
@@ -69,6 +95,7 @@ private void Awake()
         }
 
         CacheSkillAnimationDurations();
+        PreloadRangedSkillEffectPools();
     }
 
 private void Update()
@@ -101,7 +128,7 @@ private void Update()
     /// 이미 다른 스킬이 재생 중이면 무시한다. GameSceneController가
     /// UI_GameSceneView.TryStartDragonSkillCooldown이 성공했을 때만 호출한다.
     /// </summary>
-    public void PlaySkillAnimation(DragonSkillSlot slot)
+public void PlaySkillAnimation(DragonSkillSlot slot)
     {
         if (animator == null || isSkillPlaying)
         {
@@ -117,6 +144,19 @@ private void Update()
         isSkillPlaying = true;
         animator.SetInteger(SkillIndexHash, index + 1);
         SetAttackLayerWeight(1f);
+
+        if (slot == DragonSkillSlot.Q || slot == DragonSkillSlot.R)
+        {
+            pendingSkillSlot = slot;
+            if (skillEffectTriggerDelay > 0f)
+            {
+                Invoke(nameof(PlayRangedSkillEffect), skillEffectTriggerDelay);
+            }
+            else
+            {
+                PlayRangedSkillEffect();
+            }
+        }
 
         CancelInvoke(nameof(FinishSkillAnimation));
         Invoke(nameof(FinishSkillAnimation), skillAnimationDurations[index]);
@@ -137,6 +177,90 @@ private void Update()
 
         SetAttackLayerWeight(0f);
     }
+
+
+    /// <summary>
+    /// pendingSkillSlot(Q 또는 R)에 맞는 원거리 이펙트를 소환한다. PlaySkillAnimation에서
+    /// skillEffectTriggerDelay 후 호출된다.
+    /// </summary>
+    private void PlayRangedSkillEffect()
+    {
+        switch (pendingSkillSlot)
+        {
+            case DragonSkillSlot.Q:
+                SpawnFireball();
+                break;
+            case DragonSkillSlot.R:
+                SpawnMeteorStrike();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 현재 드래곤이 바라보는 방향(좌/우). UpdateFacingDirection이 rightFacingYRotation/
+    /// leftFacingYRotation으로 transform.rotation을 이미 설정해둔 상태라, transform.forward가
+    /// 월드 X축 기준 좌/우 방향과 일치한다.
+    /// </summary>
+    private Vector3 GetFacingDirection()
+    {
+        return transform.forward;
+    }
+
+    /// <summary>
+    /// Q(파이어볼): 캐릭터 앞쪽(fireballMuzzleLocalOffset)에서 현재 바라보는 방향으로
+    /// 투사체를 발사한다. 실제 이동/사거리 도달 판정은 DragonProjectile이 자체적으로 처리한다.
+    /// </summary>
+    private void SpawnFireball()
+    {
+        if (ObjectPoolController.Instance == null)
+        {
+            return;
+        }
+
+        Vector3 spawnPosition = transform.TransformPoint(fireballMuzzleLocalOffset);
+        Quaternion spawnRotation = transform.rotation;
+
+        GameObject projectileObject = ObjectPoolController.Instance.Get(FireballEffectKey, spawnPosition, spawnRotation);
+        if (projectileObject == null)
+        {
+            return;
+        }
+
+        DragonProjectile projectile = projectileObject.GetComponent<DragonProjectile>();
+        if (projectile == null)
+        {
+            DebugLogController.GenerateErrorMessage<DragonController>($"'{FireballEffectKey}' 프리팝에 DragonProjectile 컴포넌트가 없습니다.");
+            return;
+        }
+
+        projectile.Launch(GetFacingDirection(), fireballSpeed, fireballRange, string.Empty);
+    }
+
+    /// <summary>
+    /// R(메테오 스트라이크): 캐릭터 위치에서 바라보는 방향으로 meteorStrikeRange만큼
+    /// 떨어진 지점을 계산해, 그 지점에 공격(내부적으로 낙하/충돌 연출을 자체 재생)을 바로 소환한다.
+    /// 캐릭터에서 날아가는 투사체가 아니라 목표 지점에 직접 소환한다는 점이 SpawnFireball과의 핵심 차이다.
+    /// </summary>
+private void SpawnMeteorStrike()
+    {
+        if (ObjectPoolController.Instance == null)
+        {
+            return;
+        }
+
+        Vector3 targetPosition = transform.position + GetFacingDirection() * meteorStrikeRange;
+        targetPosition.y += meteorStrikeHeightOffset;
+
+        ObjectPoolController.Instance.Get(MeteorStrikeEffectKey, targetPosition, Quaternion.identity);
+    }
+
+    /// <summary>Q/R 원거리 스킬이 사용하는 이펙트 풀을 Awake에서 미리 프리로드한다.</summary>
+    private void PreloadRangedSkillEffectPools()
+    {
+        ObjectPoolController.Instance?.Preload(FireballEffectKey, RangedSkillPrewarmCount);
+        ObjectPoolController.Instance?.Preload(MeteorStrikeEffectKey, RangedSkillPrewarmCount);
+    }
+
 
     /// <summary>
     /// BasicDragonStance의 Attack Layer weight를 설정한다. 스킬 재생 중에만 1로 켜서

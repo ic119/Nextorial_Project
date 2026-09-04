@@ -67890,6 +67890,7 @@ GameObject:
   - component: {fileID: 9187833564400504275}
   - component: {fileID: 7411305885964204997}
   - component: {fileID: 5527095210402221535}
+  - component: {fileID: 672249106717720092}
   m_Layer: 0
   m_Name: MeteoStrike
   m_TagString: Untagged
@@ -72716,6 +72717,19 @@ ParticleSystemRenderer:
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
   m_MeshWeighting3: 1
+--- !u!114 &672249106717720092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7539977150858689171}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 65742b9ba9ccd3d48908a01567d27b34, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TimedPoolRelease
+  lifetime: 3.5
 --- !u!1 &8914156368675428659
 GameObject:
   m_ObjectHideFlags: 0

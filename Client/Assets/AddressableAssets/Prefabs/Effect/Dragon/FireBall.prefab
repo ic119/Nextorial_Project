@@ -14840,6 +14840,7 @@ GameObject:
   - component: {fileID: 8612240952006757480}
   - component: {fileID: 944048628727427484}
   - component: {fileID: 880384820279623862}
+  - component: {fileID: 6582522610115654949}
   m_Layer: 0
   m_Name: FireBall
   m_TagString: Untagged
@@ -19740,6 +19741,18 @@ ParticleSystemRenderer:
   m_MeshWeighting1: 1
   m_MeshWeighting2: 1
   m_MeshWeighting3: 1
+--- !u!114 &6582522610115654949
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5818296303581436142}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bd43cfa5930b1884fa3f4c1da13fe354, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DragonProjectile
 --- !u!1 &7330758197846498341
 GameObject:
   m_ObjectHideFlags: 0
