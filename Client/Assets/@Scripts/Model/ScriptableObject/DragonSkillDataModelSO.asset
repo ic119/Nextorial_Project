@@ -15,7 +15,7 @@ MonoBehaviour:
   skillDataList:
   - slot: 0
     skillIcon: {fileID: 21300000, guid: d95d403a51a2a744aa081245e2ce487b, type: 3}
-    skillName: "\uD30C\uC774\uC5B4 \uBE0C\uB808\uC2A4"
+    skillName: "\uD30C\uC774\uC5B4 \uBCFC"
     cooldown: 6
     damage: 15
   - slot: 1
