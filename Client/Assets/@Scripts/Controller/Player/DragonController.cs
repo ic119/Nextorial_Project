@@ -23,6 +23,33 @@ public class DragonController : MonoBehaviour
 
     private static readonly int IsIdleHash = Animator.StringToHash(nameof(DragonMoveState.IsIdle));
     private static readonly int IsMoveHash = Animator.StringToHash(nameof(DragonMoveState.IsMove));
+    private static readonly int SkillIndexHash = Animator.StringToHash("SkillIndex");
+
+    /// <summary>
+    /// Q/W/E/R 스킬 애니메이션이 재생 중인지 여부. 재생 중에는 따라가기 이동을 멈추고(제자리 시전 모션),
+    /// 새 스킬 입력도 무시한다.
+    /// </summary>
+    private bool isSkillPlaying;
+
+    /// <summary>
+    /// Q(화염 브레스)/W(비행 화염 브레스)/E(포효)/R(돌진) 각 스킬 애니메이션 클립 길이.
+    /// 인덱스는 DragonSkillSlot(Q/W/E/R)과 일치한다.
+    /// </summary>
+    private readonly float[] skillAnimationDurations = new float[4];
+
+    private const float FallbackDragonSkillClipLength = 1f;
+
+    private const string DragonFireClipName = "Anim_Dra_Fire";
+    private const string DragonFlyFireClipName = "Anim_Dra_Fly_Fire";
+    private const string DragonRoarClipName = "Anim_Dra_Roar";
+    private const string DragonDashClipName = "Anim_Dra_Jump";
+
+    /// <summary>
+    /// 공격 모션이 위치한 BasicDragonStance의 별도 레이어 이름. 평소엔 weight 0으로 꺼져 있다가,
+    /// 스킬 재생 중에만 1로 켜서 애니메이션이 보이도록 한다.
+    /// </summary>
+    private const string AttackLayerName = "Attack Layer";
+    private int attackLayerIndex = -1;
 
     private Animator animator;
     private Transform followTarget;
@@ -31,14 +58,22 @@ public class DragonController : MonoBehaviour
     #endregion
 
     #region LifeCycle
-    private void Awake()
+private void Awake()
     {
         animator = GetComponent<Animator>();
+
+        attackLayerIndex = animator.GetLayerIndex(AttackLayerName);
+        if (attackLayerIndex < 0)
+        {
+            DebugLogController.GenerateErrorMessage<DragonController>($"Animator에 '{AttackLayerName}' 레이어가 없어 스킬 모션이 표시되지 않을 수 있습니다.");
+        }
+
+        CacheSkillAnimationDurations();
     }
 
-    private void Update()
+private void Update()
     {
-        float direction = ComputeFollowDirection();
+        float direction = isSkillPlaying ? 0f : ComputeFollowDirection();
 
         if (direction != 0f)
         {
@@ -59,6 +94,105 @@ public class DragonController : MonoBehaviour
     {
         followTarget = target;
     }
+
+
+    /// <summary>
+    /// slot(Q/W/E/R)에 해당하는 스킬 애니메이션을 BasicDragonStance의 Attack Layer에서 재생한다.
+    /// 이미 다른 스킬이 재생 중이면 무시한다. GameSceneController가
+    /// UI_GameSceneView.TryStartDragonSkillCooldown이 성공했을 때만 호출한다.
+    /// </summary>
+    public void PlaySkillAnimation(DragonSkillSlot slot)
+    {
+        if (animator == null || isSkillPlaying)
+        {
+            return;
+        }
+
+        int index = (int)slot;
+        if (index < 0 || index >= skillAnimationDurations.Length)
+        {
+            return;
+        }
+
+        isSkillPlaying = true;
+        animator.SetInteger(SkillIndexHash, index + 1);
+        SetAttackLayerWeight(1f);
+
+        CancelInvoke(nameof(FinishSkillAnimation));
+        Invoke(nameof(FinishSkillAnimation), skillAnimationDurations[index]);
+    }
+
+    /// <summary>
+    /// 스킬 애니메이션 재생이 끝난 뒤 SkillIndex를 0으로 되돌려 AttackLayerIdle로
+    /// 복귀시키고, Attack Layer weight도 0으로 되돌린다.
+    /// </summary>
+    private void FinishSkillAnimation()
+    {
+        isSkillPlaying = false;
+
+        if (animator != null)
+        {
+            animator.SetInteger(SkillIndexHash, 0);
+        }
+
+        SetAttackLayerWeight(0f);
+    }
+
+    /// <summary>
+    /// BasicDragonStance의 Attack Layer weight를 설정한다. 스킬 재생 중에만 1로 켜서
+    /// 스킬 모션이 Base Layer(Idle/Move/Jump) 위에 덮여이게 하고, 평소엔 0으로 되돌려 Base Layer만 보인다.
+    /// </summary>
+    private void SetAttackLayerWeight(float weight)
+    {
+        if (animator == null || attackLayerIndex < 0)
+        {
+            return;
+        }
+
+        animator.SetLayerWeight(attackLayerIndex, weight);
+    }
+
+    /// <summary>
+    /// Q/W/E/R 각 스킬 클립 길이를 미리 읽어둔다. 클립을 찾지 못하면 FallbackDragonSkillClipLength로 대체한다.
+    /// </summary>
+    private void CacheSkillAnimationDurations()
+    {
+        for (int i = 0; i < skillAnimationDurations.Length; i++)
+        {
+            skillAnimationDurations[i] = FallbackDragonSkillClipLength;
+        }
+
+        if (animator.runtimeAnimatorController == null)
+        {
+            return;
+        }
+
+        foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
+        {
+            if (clip == null)
+            {
+                continue;
+            }
+
+            if (clip.name == DragonFireClipName)
+            {
+                skillAnimationDurations[(int)DragonSkillSlot.Q] = clip.length;
+            }
+            else if (clip.name == DragonFlyFireClipName)
+            {
+                skillAnimationDurations[(int)DragonSkillSlot.W] = clip.length;
+            }
+            else if (clip.name == DragonRoarClipName)
+            {
+                skillAnimationDurations[(int)DragonSkillSlot.E] = clip.length;
+            }
+            else if (clip.name == DragonDashClipName)
+            {
+                skillAnimationDurations[(int)DragonSkillSlot.R] = clip.length;
+            }
+        }
+    }
+
 
     /// <summary>
     /// followTarget과의 X축 거리를 기준으로 이동 방향(-1/0/1)을 계산한다.

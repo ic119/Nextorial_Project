@@ -2,9 +2,6 @@ using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
 {
-
-
-
     #region Variable
     [Header("Camera Settings")]
     [SerializeField] private CameraZoomController cameraZoomController;
@@ -35,7 +32,11 @@ public class GameSceneController : MonoBehaviour
 
     [Header("Player Skill Data")]
     [Tooltip("A/S/D/F 스킬(이름/쿸타임/데미지) 데이터. Addressable로 로드되며 Inspector에서 직접 드래그할 필요는 없다.")]
-    private SkillDataModelSO skillDataModel;
+private SkillDataModelSO skillDataModel;
+
+    [Header("Dragon Skill Data")]
+    [Tooltip("Q/W/E/R 스킬(이름/쿨타임/데미지) 데이터. Addressable로 로드되며 Inspector에서 직접 드래그할 필요는 없다.")]
+    private DragonSkillDataModelSO dragonSkillDataModel;
 
 
     private KeyboardInputController spawnedKeyboardInput;
@@ -47,26 +48,28 @@ public class GameSceneController : MonoBehaviour
     #endregion
 
     #region LifeCycle
-private void Start()
+    private void Start()
     {
         SpawnPlayerCharacter();
         SpawnPlayerDragon();
         LoadGameSceneUI();
         LoadSkillData();
+        LoadDragonSkillData();
     }
 
-private void OnDestroy()
+    private void OnDestroy()
     {
-        if (spawnedKeyboardInput != null)
+if (spawnedKeyboardInput != null)
         {
             spawnedKeyboardInput.OnSkillKeyPressed -= HandleSkillKeyPressed;
+            spawnedKeyboardInput.OnDragonSkillKeyPressed -= HandleDragonSkillKeyPressed;
         }
     }
 
     #endregion
 
     #region Method
-private void SpawnPlayerCharacter()
+    private void SpawnPlayerCharacter()
     {
         UserSaveData userData = SaveDataController.Instance != null ? SaveDataController.Instance.CurrentData?.user : null;
 
@@ -122,7 +125,8 @@ private void SpawnPlayerCharacter()
             // 이후 여기서 AddComponent한 두 번째 인스턴스가 SingletonObject.Awake에서 자기 자신(spawnedCharacter)을 파괴해버린다.
             spawnedCharacter.AddComponent<KeyboardInputController>();
             spawnedKeyboardInput = spawnedCharacter.GetComponent<KeyboardInputController>();
-            spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
+spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
+            spawnedKeyboardInput.OnDragonSkillKeyPressed += HandleDragonSkillKeyPressed;
 
             SetupPhysics(spawnedCharacter);
             spawnedPlayerController = spawnedCharacter.AddComponent<PlayerController>();
@@ -161,7 +165,7 @@ private void SpawnPlayerCharacter()
     /// dragonSpawnPoint(지정 시) 또는 characterSpawnPoint/defaultSpawnPosition 기준 오프셋으로
     /// 계산하므로 캐릭터 인스턴스가 먼저 준비될 필요는 없다.
     /// </summary>
-private void SpawnPlayerDragon()
+    private void SpawnPlayerDragon()
     {
         DragonSaveData dragonData = SaveDataController.Instance != null ? SaveDataController.Instance.CurrentData?.dragon : null;
 
@@ -228,7 +232,7 @@ private void SpawnPlayerDragon()
     /// 캐릭터 스폰과 별개의 비동기 로드라 완료 순서가 보장되지 않으므로,
     /// 캐릭터/UI 중 나중에 준비되는 쪽에서 TryBindGameSceneView로 실제 바인딩을 시도한다.
     /// </summary>
-private void LoadGameSceneUI()
+    private void LoadGameSceneUI()
     {
         if (AddressableAssetController.Instance == null)
         {
@@ -238,8 +242,10 @@ private void LoadGameSceneUI()
 
         AddressableAssetController.Instance.LoadAndBindUI<UI_GameSceneView>(AddressableKey.UI_GameScene, view =>
         {
-            gameSceneView = view;
+gameSceneView = view;
             TryBindGameSceneView();
+            TryApplySkillIcons();
+            TryApplyDragonSkillIcons();
         });
     }
 
@@ -266,8 +272,38 @@ private void LoadGameSceneUI()
             }
 
             skillDataModel = so;
+            TryApplySkillIcons();
         });
     }
+
+
+    /// <summary>
+    /// 드래곤 스킬(Q/W/E/R) 데이터(스킬명/쿨타임/데미지)를 담은 DragonSkillDataModelSO를 Addressable로 로드한다.
+    /// 드래곤 스폰과는 독립적인 비동기 로드이며, 로드가 끝나기 전에 드래곤 스킬 키가 눌리면 해당 입력은 무시된다.
+    /// </summary>
+    private void LoadDragonSkillData()
+    {
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("AddressableAssetController.Instance가 없어 드래곤 스킬 데이터를 로드할 수 없습니다.");
+            return;
+        }
+
+        string key = AddressableKey.DragonSkillDataModelSO.ToString();
+
+        AddressableAssetController.Instance.LoadPrefabAddress<DragonSkillDataModelSO>(key, so =>
+        {
+            if (so == null)
+            {
+                DebugLogController.GenerateErrorMessage<GameSceneController>($"드래곤 스킬 데이터 로드 실패 Key : {key}");
+                return;
+            }
+
+            dragonSkillDataModel = so;
+            TryApplyDragonSkillIcons();
+        });
+    }
+
 
 
     /// <summary>
@@ -284,7 +320,37 @@ private void LoadGameSceneUI()
         gameSceneView.Bind(cachedUserData, spawnedCharacterModel);
     }
 
-/// <summary>
+    /// <summary>
+    /// UI와 스킬 데이터가 둘 다 준비된 경우에만 슬롯(A/S/D/F) 아이콘을 연결한다.
+    /// 어느 쪽이 먼저 끝나도 동작하도록 양쪽 로드 완료 콜백에서 이 메서드를 호출한다.
+    /// </summary>
+    private void TryApplySkillIcons()
+    {
+        if (gameSceneView == null || skillDataModel == null)
+        {
+            return;
+        }
+
+        gameSceneView.ApplySkillIcons(skillDataModel);
+    }
+
+
+    /// <summary>
+    /// UI와 드래곤 스킬 데이터가 둘 다 준비된 경우에만 슬롯(Q/W/E/R) 아이콘을 연결한다.
+    /// 어느 쪽이 먼저 끝나도 동작하도록 양쪽 로드 완료 콜백에서 이 메서드를 호출한다.
+    /// </summary>
+    private void TryApplyDragonSkillIcons()
+    {
+        if (gameSceneView == null || dragonSkillDataModel == null)
+        {
+            return;
+        }
+
+        gameSceneView.ApplyDragonSkillIcons(dragonSkillDataModel);
+    }
+
+
+    /// <summary>
     /// 캐릭터와 드래곤 스폰(둘 다 독립적인 비동기 Addressable 로드)이 모두 끝난 경우에만
     /// 드래곤의 추적 대상을 유저 캐릭터로 연결한다. 어느 쪽이 먼저 끝나도 동작하도록
     /// 양쪽 완료 콜백에서 이 메서드를 호출한다.
@@ -323,7 +389,7 @@ private void LoadGameSceneUI()
     /// KeyboardInputController에서 A/S/D/F 스킬 키가 눌렸을 때 호출된다. UI_GameSceneView의
     /// 쿸타임 기능을 호출해 해당 슬롯을 쿸타임 상태로 전환한다(실제 스킬 효과/데미지는 아직 없다).
     /// </summary>
-private void HandleSkillKeyPressed(UI_GameSceneView.PlayerSkillSlot slot)
+    private void HandleSkillKeyPressed(UI_GameSceneView.PlayerSkillSlot slot)
     {
         if (gameSceneView == null)
         {
@@ -348,4 +414,36 @@ private void HandleSkillKeyPressed(UI_GameSceneView.PlayerSkillSlot slot)
         DebugLogController.GenerateLogMessage<GameSceneController>(
             $"스킬 사용: {skill.skillName} (슬롯:{slot}, 데미지:{skill.damage}, 쿸타임:{skill.cooldown}초)");
     }
+
+
+    /// <summary>
+    /// KeyboardInputController에서 Q/W/E/R 드래곤 스킬 키가 눌렸을 때 호출된다. UI_GameSceneView의
+    /// 쿨타임 기능을 호출해 해당 슬롯을 쿨타임 상태로 전환하고, 성공하면 DragonController의 스킬 애니메이션을 재생한다.
+    /// </summary>
+    private void HandleDragonSkillKeyPressed(DragonSkillSlot slot)
+    {
+        if (gameSceneView == null)
+        {
+            return;
+        }
+
+        DragonSkillData skill = dragonSkillDataModel != null ? dragonSkillDataModel.GetSkill(slot) : null;
+        if (skill == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>($"드래곤 슬롯 {slot}에 대응하는 스킬 데이터를 찾을 수 없습니다.");
+            return;
+        }
+
+        bool started = gameSceneView.TryStartDragonSkillCooldown(slot, skill.cooldown);
+        if (!started)
+        {
+            return;
+        }
+
+        spawnedDragonController?.PlaySkillAnimation(slot);
+
+        DebugLogController.GenerateLogMessage<GameSceneController>(
+            $"드래곤 스킬 사용: {skill.skillName} (슬롯:{slot}, 데미지:{skill.damage}, 쿨타임:{skill.cooldown}초)");
+    }
+
 }

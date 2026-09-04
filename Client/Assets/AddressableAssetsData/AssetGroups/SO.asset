@@ -15,8 +15,18 @@ MonoBehaviour:
   m_GroupName: SO
   m_GUID: b578bc7206d388649a4b9ef8bfafbb06
   m_SerializeEntries:
+  - m_GUID: 397832376d413e04297f01a4932673cd
+    m_Address: DragonSkillDataModelSO
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 5e8db7ca14bda12428d1869a6897fd3c
     m_Address: AddressableAssetModelSO
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bf9bbcdd569dbbc4180ec1ab30ef0dd3
+    m_Address: SkillDataModelSO
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

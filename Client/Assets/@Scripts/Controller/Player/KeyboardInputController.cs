@@ -23,6 +23,12 @@ public class KeyboardInputController : SingletonObject<KeyboardInputController>
     [SerializeField] private Key skillDKey = Key.D;
     [SerializeField] private Key skillFKey = Key.F;
 
+    [Header("Dragon Skill Key Bindings (Q/W/E/R)")]
+    [SerializeField] private Key dragonSkillQKey = Key.Q;
+    [SerializeField] private Key dragonSkillWKey = Key.W;
+    [SerializeField] private Key dragonSkillEKey = Key.E;
+    [SerializeField] private Key dragonSkillRKey = Key.R;
+
 
     /// <summary>
     /// false로 설정하면 이 프레임부터 모든 입력을 무시한다. 팝업/컷씬 등에서 게임플레이 입력을
@@ -44,6 +50,9 @@ public class KeyboardInputController : SingletonObject<KeyboardInputController>
 
     /// <summary>스킬 슬롯(A/S/D/F) 키가 눌린 프레임에 해당 슬롯과 함께 발생한다.</summary>
     public event Action<UI_GameSceneView.PlayerSkillSlot> OnSkillKeyPressed;
+
+    /// <summary>드래곤 스킬 슬롯(Q/W/E/R) 키가 눌린 프레임에 해당 슬롯과 함께 발생한다.</summary>
+    public event Action<DragonSkillSlot> OnDragonSkillKeyPressed;
 
     #endregion
 
@@ -73,6 +82,11 @@ private void Update()
         CheckSkillKey(keyboard, skillSKey, UI_GameSceneView.PlayerSkillSlot.S);
         CheckSkillKey(keyboard, skillDKey, UI_GameSceneView.PlayerSkillSlot.D);
         CheckSkillKey(keyboard, skillFKey, UI_GameSceneView.PlayerSkillSlot.F);
+
+        CheckDragonSkillKey(keyboard, dragonSkillQKey, DragonSkillSlot.Q);
+        CheckDragonSkillKey(keyboard, dragonSkillWKey, DragonSkillSlot.W);
+        CheckDragonSkillKey(keyboard, dragonSkillEKey, DragonSkillSlot.E);
+        CheckDragonSkillKey(keyboard, dragonSkillRKey, DragonSkillSlot.R);
     }
     #endregion
 
@@ -97,11 +111,20 @@ private void Update()
 
 
 /// <summary>_key가 이 프레임에 눌렸으면 OnSkillKeyPressed를 _slot과 함께 발생시킨다.</summary>
-    private void CheckSkillKey(Keyboard keyboard, Key key, UI_GameSceneView.PlayerSkillSlot slot)
+private void CheckSkillKey(Keyboard keyboard, Key key, UI_GameSceneView.PlayerSkillSlot slot)
     {
         if (keyboard[key].wasPressedThisFrame)
         {
             OnSkillKeyPressed?.Invoke(slot);
+        }
+    }
+
+    /// <summary>_key가 이 프레임에 눌렸으면 OnDragonSkillKeyPressed를 _slot과 함께 발생시킨다.</summary>
+    private void CheckDragonSkillKey(Keyboard keyboard, Key key, DragonSkillSlot slot)
+    {
+        if (keyboard[key].wasPressedThisFrame)
+        {
+            OnDragonSkillKeyPressed?.Invoke(slot);
         }
     }
 }

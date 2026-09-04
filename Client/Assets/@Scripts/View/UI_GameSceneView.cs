@@ -50,20 +50,28 @@ public class UI_GameSceneView : MonoBehaviour
         A = 0,
         S = 1,
         D = 2,
-        F = 3
+        F = 3,
+        Q,
+        W,
+        E,
+        R
     }
 
     [Header("Player Skill Cooldown")]
     [Tooltip("각 슬롯(A/S/D/F 순서)의 쿸타임 연출용 오버레이(Filled Image)와 남은 시간 텍스트. 배열 순서는 PlayerSkillSlot(A/S/D/F)과 일치해야 한다.")]
     [SerializeField] private SkillCooldownVisual[] playerSkillCooldownVisuals = new SkillCooldownVisual[4];
 
-    [Tooltip("쿸타임 중인 스킬 아이콘에 곱해지는 색상(어둡게 표시). 쿸타임이 끝나면 흰색으로 복구된다.")]
+    [Header("Dragon Skill Cooldown")]
+    [Tooltip("각 슬롯(Q/W/E/R 순서)의 쿨타임 연출용 오버레이(Filled Image)와 남은 시간 텍스트. 배열 순서는 DragonSkillSlot(Q/W/E/R)과 일치해야 한다.")]
+    [SerializeField] private SkillCooldownVisual[] dragonSkillCooldownVisuals = new SkillCooldownVisual[4];
+
+    [Tooltip("쿨타임 중인 스킬 아이콘에 곱해지는 색상(어둡게 표시). 쿸타임이 끝나면 흰색으로 복구된다.")]
     [SerializeField] private Color cooldownIconTint = new Color(0.4f, 0.4f, 0.4f, 1f);
 
-    [Tooltip("쿸타임이 시작된 직후(남은 시간이 가장 많을 때) 오버레이/텍스트 색상.")]
+    [Tooltip("쿨타임이 시작된 직후(남은 시간이 가장 많을 때) 오버레이/텍스트 색상.")]
     [SerializeField] private Color cooldownStartColor = new Color(0.75f, 0.15f, 0.15f, 0.7f);
 
-    [Tooltip("쿸타임이 거의 끝나갈 때(남은 시간이 0에 가까울 때) 오버레이/텍스트 색상.")]
+    [Tooltip("쿨타임이 거의 끝나갈 때(남은 시간이 0에 가까울 때) 오버레이/텍스트 색상.")]
     [SerializeField] private Color cooldownEndColor = new Color(0.2f, 0.85f, 0.35f, 0.35f);
 
 
@@ -79,6 +87,19 @@ public class UI_GameSceneView : MonoBehaviour
 
     /// <summary>슬롯별 진행 중인 쿸타임 색상 트윈(DOTween). 재트리거 시 이전 트윈을 Kill하기 위해 보관한다.</summary>
     private readonly Tween[] playerSkillCooldownTweens = new Tween[4];
+
+    private readonly SkillCooldownState[] dragonSkillCooldownStates =
+    {
+        new SkillCooldownState(),
+        new SkillCooldownState(),
+        new SkillCooldownState(),
+        new SkillCooldownState()
+    };
+
+    private Image[] dragonSkillIcons;
+
+    /// <summary>드래곤 스킬 슬롯별 진행 중인 쿨타임 색상 트윈(DOTween).</summary>
+    private readonly Tween[] dragonSkillCooldownTweens = new Tween[4];
 
 
 
@@ -106,6 +127,7 @@ private void Update()
         UpdateHpDisplay();
         UpdateExpDisplay();
         UpdatePlayerSkillCooldowns();
+        UpdateDragonSkillCooldowns();
     }
 
 private void OnDestroy()
@@ -113,6 +135,11 @@ private void OnDestroy()
         for (int i = 0; i < playerSkillCooldownTweens.Length; i++)
         {
             playerSkillCooldownTweens[i]?.Kill();
+        }
+
+        for (int i = 0; i < dragonSkillCooldownTweens.Length; i++)
+        {
+            dragonSkillCooldownTweens[i]?.Kill();
         }
     }
 
@@ -235,8 +262,6 @@ public void Bind(UserSaveData userData, PlayerCharacterModel model)
         }
     }
     #endregion
-
-
 /// <summary>
     /// 플레이어 스킬 슬롯(A/S/D/F)의 쿸타임을 시작한다. 이미 쿸타임 중이면 무시하고 false를 반환하므로,
     /// 스킬 발동 로직(예: PlayerController/향후 SkillController)이 이 반환값으로 실제 발동 성공 여부를 판단할 수 있다.
@@ -270,6 +295,40 @@ public bool TryStartPlayerSkillCooldown(PlayerSkillSlot slot, float cooldownDura
         return index >= 0 && index < playerSkillCooldownStates.Length && playerSkillCooldownStates[index].remaining > 0f;
     }
 
+
+    /// <summary>
+    /// 드래곤 스킬 슬롯(Q/W/E/R)의 쿨타임을 시작한다. 이미 쿨타임 중이면 무시하고 false를 반환한다.
+    /// </summary>
+    public bool TryStartDragonSkillCooldown(DragonSkillSlot slot, float cooldownDuration)
+    {
+        int index = (int)slot;
+        if (index < 0 || index >= dragonSkillCooldownStates.Length || cooldownDuration <= 0f)
+        {
+            return false;
+        }
+
+        if (dragonSkillCooldownStates[index].remaining > 0f)
+        {
+            return false;
+        }
+
+        dragonSkillCooldownStates[index].duration = cooldownDuration;
+        dragonSkillCooldownStates[index].remaining = cooldownDuration;
+
+        PlayDragonCooldownColorTween(index, cooldownDuration);
+        return true;
+    }
+
+    /// <summary>
+    /// slot이 현재 쿨타임 중인지 여부.
+    /// </summary>
+    public bool IsDragonSkillOnCooldown(DragonSkillSlot slot)
+    {
+        int index = (int)slot;
+        return index >= 0 && index < dragonSkillCooldownStates.Length && dragonSkillCooldownStates[index].remaining > 0f;
+    }
+
+
     private void EnsureSkillIconArray()
     {
         if (playerSkillIcons == null)
@@ -277,6 +336,78 @@ public bool TryStartPlayerSkillCooldown(PlayerSkillSlot slot, float cooldownDura
             playerSkillIcons = new[] { SkillSlotA, SkillSlotS, SkillSlotD, SkillSlotF };
         }
     }
+
+
+    private void EnsureDragonSkillIconArray()
+    {
+        if (dragonSkillIcons == null)
+        {
+            dragonSkillIcons = new[] { skillSlotQ, skillSlotW, skillSlotE, skillSlotR };
+        }
+    }
+
+
+
+    /// <summary>
+    /// SkillDataModelSO에 등록된 스킬 데이터를 슬롯(A/S/D/F)별로 조회해 해당 슬롯 Image의 sprite를 아이콘으로 설정한다.
+    /// 슬롯에 매칭되는 스킬이 없거나 skillIcon이 비어 있으면 해당 슬롯은 건드리지 않는다.
+    /// </summary>
+    public void ApplySkillIcons(SkillDataModelSO skillDataModel)
+    {
+        if (skillDataModel == null)
+        {
+            return;
+        }
+
+        EnsureSkillIconArray();
+
+        foreach (PlayerSkillSlot slot in System.Enum.GetValues(typeof(PlayerSkillSlot)))
+        {
+            SkillData skill = skillDataModel.GetSkill(slot);
+            if (skill == null || skill.skillIcon == null)
+            {
+                continue;
+            }
+
+            int index = (int)slot;
+            if (index >= 0 && index < playerSkillIcons.Length && playerSkillIcons[index] != null)
+            {
+                playerSkillIcons[index].sprite = skill.skillIcon;
+            }
+        }
+    }
+
+
+    /// <summary>
+    /// DragonSkillDataModelSO에 등록된 스킬 데이터를 슬롯(Q/W/E/R)별로 조회해 해당 슬롯 Image의 sprite를 아이콘으로 설정한다.
+    /// 슬롯에 매칭되는 스킬이 없거나 skillIcon이 비어 있으면 해당 슬롯은 건드리지 않는다.
+    /// </summary>
+    public void ApplyDragonSkillIcons(DragonSkillDataModelSO skillDataModel)
+    {
+        if (skillDataModel == null)
+        {
+            return;
+        }
+
+        EnsureDragonSkillIconArray();
+
+        foreach (DragonSkillSlot slot in System.Enum.GetValues(typeof(DragonSkillSlot)))
+        {
+            DragonSkillData skill = skillDataModel.GetSkill(slot);
+            if (skill == null || skill.skillIcon == null)
+            {
+                continue;
+            }
+
+            int index = (int)slot;
+            if (index >= 0 && index < dragonSkillIcons.Length && dragonSkillIcons[index] != null)
+            {
+                dragonSkillIcons[index].sprite = skill.skillIcon;
+            }
+        }
+    }
+
+
 
     /// <summary>
     /// 매 프레임 남은 쿸타임을 줄이고, 슬롯별 오버레이(fillAmount)/카운트다운 텍스트/아이콘 색상을 갱신한다.
@@ -310,6 +441,38 @@ private void UpdatePlayerSkillCooldowns()
             }
         }
     }
+
+
+    /// <summary>
+    /// UpdatePlayerSkillCooldowns와 동일한 방식으로 드래곤 스킬 슬롯(Q/W/E/R)의 남은 쿨타임/오버레이/카운트다운 텍스트를 갱신한다.
+    /// </summary>
+    private void UpdateDragonSkillCooldowns()
+    {
+        for (int i = 0; i < dragonSkillCooldownStates.Length; i++)
+        {
+            SkillCooldownState state = dragonSkillCooldownStates[i];
+            SkillCooldownVisual visual = i < dragonSkillCooldownVisuals.Length ? dragonSkillCooldownVisuals[i] : default;
+
+            if (state.remaining > 0f)
+            {
+                state.remaining = Mathf.Max(0f, state.remaining - Time.deltaTime);
+            }
+
+            bool onCooldown = state.remaining > 0f;
+            float remainingRatio = onCooldown && state.duration > 0f ? state.remaining / state.duration : 0f;
+
+            if (visual.cooldownFillImage != null)
+            {
+                visual.cooldownFillImage.fillAmount = remainingRatio;
+            }
+
+            if (visual.cooldownText != null)
+            {
+                visual.cooldownText.text = onCooldown ? Mathf.CeilToInt(state.remaining).ToString() : string.Empty;
+            }
+        }
+    }
+
 
 
 /// <summary>
@@ -365,6 +528,56 @@ private void UpdatePlayerSkillCooldowns()
         playerSkillCooldownTweens[index] = sequence;
     }
 
+
+    /// <summary>PlayCooldownColorTween과 동일한 방식으로 드래곤 스킬 슬롯의 쿨타임 색상 연출을 재생한다.</summary>
+    private void PlayDragonCooldownColorTween(int index, float duration)
+    {
+        EnsureDragonSkillIconArray();
+
+        dragonSkillCooldownTweens[index]?.Kill();
+
+        SkillCooldownVisual visual = index < dragonSkillCooldownVisuals.Length ? dragonSkillCooldownVisuals[index] : default;
+        Image icon = index < dragonSkillIcons.Length ? dragonSkillIcons[index] : null;
+
+        Sequence sequence = DOTween.Sequence();
+        bool hasTarget = false;
+
+        if (visual.cooldownFillImage != null)
+        {
+            visual.cooldownFillImage.color = cooldownStartColor;
+            sequence.Join(visual.cooldownFillImage.DOColor(cooldownEndColor, duration).SetEase(Ease.Linear));
+            hasTarget = true;
+        }
+
+        if (visual.cooldownText != null)
+        {
+            Color startTextColor = cooldownStartColor;
+            startTextColor.a = 1f;
+            Color endTextColor = cooldownEndColor;
+            endTextColor.a = 1f;
+
+            visual.cooldownText.color = startTextColor;
+            sequence.Join(visual.cooldownText.DOColor(endTextColor, duration).SetEase(Ease.Linear));
+            hasTarget = true;
+        }
+
+        if (icon != null)
+        {
+            icon.color = cooldownIconTint;
+            sequence.Join(icon.DOColor(Color.white, duration).SetEase(Ease.Linear));
+            hasTarget = true;
+        }
+
+        if (!hasTarget)
+        {
+            return;
+        }
+
+        sequence.OnComplete(() => ResetDragonSkillCooldownVisual(index));
+        dragonSkillCooldownTweens[index] = sequence;
+    }
+
+
     /// <summary>
     /// 해당 슬롯의 오버레이/텍스트/아이콘을 "준비됨" 상태(fillAmount 0, 빈 텍스트, 흰색)로 되돌린다.
     /// 쿸타임 트윈이 자연스럽게 끝났을 때(OnComplete)와 Bind()에서 재사용한다.
@@ -398,4 +611,37 @@ private void UpdatePlayerSkillCooldowns()
             playerSkillIcons[index].color = Color.white;
         }
     }
+
+
+    /// <summary>ResetSkillCooldownVisual과 동일한 방식으로 드래곤 스킬 슬롯을 "준비됨" 상태로 되돌린다.</summary>
+    private void ResetDragonSkillCooldownVisual(int index)
+    {
+        EnsureDragonSkillIconArray();
+
+        if (index < 0)
+        {
+            return;
+        }
+
+        if (index < dragonSkillCooldownVisuals.Length)
+        {
+            SkillCooldownVisual visual = dragonSkillCooldownVisuals[index];
+            if (visual.cooldownFillImage != null)
+            {
+                visual.cooldownFillImage.fillAmount = 0f;
+            }
+
+            if (visual.cooldownText != null)
+            {
+                visual.cooldownText.text = string.Empty;
+                visual.cooldownText.color = Color.white;
+            }
+        }
+
+        if (index < dragonSkillIcons.Length && dragonSkillIcons[index] != null)
+        {
+            dragonSkillIcons[index].color = Color.white;
+        }
+    }
+
 }

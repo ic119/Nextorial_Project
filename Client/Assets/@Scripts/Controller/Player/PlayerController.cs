@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// KeyboardInputController로부터 좌우 이동 축과 점프/공격 이벤트를 받아 Rigidbody를 통해 캐릭터를 X축으로 이동시킨다.
@@ -35,13 +35,13 @@ public class PlayerController : MonoBehaviour
     [SerializeField]
     private SlashEffectPose[] slashEffectPosesByComboStep =
     {
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 0.65f, 1f), localEulerAngles = new Vector3(1f, 180f, 5f) }
+        new SlashEffectPose { localOffset = new Vector3(0f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0f, 0.65f, 1f), localEulerAngles = new Vector3(1f, 180f, 5f) }
     };
     [Tooltip("콤보 입력 시점부터 스래시 이펙트를 터뜨리까지의 지연 시간(초). 애니메이션 이벤트 대신 이 값으로 스윈 타이밍에 맞춰 튜닝한다.")]
     [SerializeField] private float slashEffectTriggerDelay = 0.12f;
 
-    private const string SlashEffectKey = "Slash_Normal";
+    private const string SlashEffectKey = "SlashNormal";
     private const int SlashEffectPrewarmCount = 3;
     private int pendingSlashEffectComboStep;
 
@@ -50,6 +50,23 @@ public class PlayerController : MonoBehaviour
     /// </summary>
     private const string SlashFireForceEffectKey = "SlashFireForce";
     private const float FireForceBuffDuration = 8f;
+
+    /// <summary>
+    /// F(회전베기) 스킬 사용 시 사용하는 이펙트 Addressable 키.
+    /// </summary>
+    private const string WheelWindEffectKey = "WheelWindNormal";
+
+    /// <summary>
+    /// 스킬 이펙트를 애니메이션 종료 시간에 맞춰야 할 때(예: F/WheelWind), 목표 재생 시간이 이 값 미만으로 내려가지 않도록(0 나누기 방지) 하단을 설정한다.
+    /// </summary>
+    private const float MinEffectSyncDuration = 0.05f;
+
+    /// <summary>
+    /// SyncParticleDurationToTarget이 계산하는 simulationSpeed의 허용 범위. 애니메이션이 극단적으로 짧아도/길어도
+    /// 이펙트가 순간 사라지거나(과도하게 빨라짐) 정지된 듯 보이지(과도하게 느려짐) 않도록 clamp한다.
+    /// </summary>
+    private const float MinEffectSimulationSpeed = 0.1f;
+    private const float MaxEffectSimulationSpeed = 10f;
 
     /// <summary>
     /// 기본 공격(콤보)이 실제로 사용하는 이펙트 키. 평소엔 SlashEffectKey이고, D 스킬 사용 직후
@@ -63,10 +80,10 @@ public class PlayerController : MonoBehaviour
     [SerializeField]
     private SlashEffectPose[] skillEffectPosesBySlot =
     {
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 0f), localEulerAngles = new Vector3(0f, 180f, 90f) },
-        new SlashEffectPose { localOffset = new Vector3(0.75f, 1f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) }
+        new SlashEffectPose { localOffset = new Vector3(0f, 0.65f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0f, 0.65f, 1f), localEulerAngles = new Vector3(0f, 180f, 90f) },
+        new SlashEffectPose { localOffset = new Vector3(0f, 0f, 0f), localEulerAngles = new Vector3(0f, 180f, 0f) },
+        new SlashEffectPose { localOffset = new Vector3(0f, 0.65f, 0f), localEulerAngles = new Vector3(0f, 180f, 0f) }
     };
     [Tooltip("스킬 시전 시점부터 이펙트를 터뜨리까지의 지연 시간(초).")]
     [SerializeField] private float skillEffectTriggerDelay = 0.12f;
@@ -77,7 +94,7 @@ public class PlayerController : MonoBehaviour
         SlashEffectKey,
         SlashEffectKey,
         SlashEffectKey, // D: AttributeAssignmentEffect는 루프 파티클이라 풀링 대신 attributeAssignmentEffectInstance.SetActive로 별도 관리한다.
-        SlashEffectKey
+        WheelWindEffectKey
     };
 
 
@@ -148,6 +165,12 @@ public class PlayerController : MonoBehaviour
     private const float FallbackSkillClipLength = 0.6f;
     private readonly float[] skillAnimationDurations = new float[4];
 
+    /// <summary>
+    /// S(삼단베기)를 구성하는 Combo01~03 각 클립의 개별 길이. 타격마다 이펙트를 나눈 소환할 때
+    /// 각 타격이 시작되는 시점(누적 시간)을 계산하는 데 쓰인다.
+    /// </summary>
+    private readonly float[] tripleSlashClipLengths = new float[TripleSlashClipNames.Length];
+
 
     /// <summary>
     /// 공격 모션(Attack1/Attack2)이 위치한 BasicCharacterStance의 별도 레이어 이름.
@@ -171,7 +194,7 @@ public class PlayerController : MonoBehaviour
     private readonly float[] comboClipLengths = new float[MaxComboStep];
 
     [Tooltip("마지막 콤보 단계(MaxComboStep) 공격 이후, 새 콤보를 다시 시작할 수 있을 때까지의 대기 시간(초).")]
-    [SerializeField] private float postComboLockoutDuration = 1f;
+    [SerializeField] private float postComboLockoutDuration = 0.5f;
     private float postComboLockoutEndTime;
 
     #endregion
@@ -182,7 +205,7 @@ public class PlayerController : MonoBehaviour
     #endregion
 
     #region LifeCycle
-private void Awake()
+    private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
@@ -224,7 +247,7 @@ private void Awake()
         LoadAttributeAssignmentEffect();
     }
 
-private void OnDestroy()
+    private void OnDestroy()
     {
         if (KeyboardInputController.Instance != null)
         {
@@ -236,7 +259,7 @@ private void OnDestroy()
 
 
 
-private void FixedUpdate()
+    private void FixedUpdate()
     {
         float direction = KeyboardInputController.Instance != null ? KeyboardInputController.Instance.MoveAxis : 0f;
 
@@ -428,7 +451,7 @@ private void FixedUpdate()
     /// 장착된 무기 타입은 PlayerCharacterModel이 갖고 있으며, 여기서는 참조만 한다.
     /// 현재는 SingleSword 클립 세트만 있어 다른 무기 타입일 때는 콤보를 시작하지 않는다.
     /// </summary>
-private void UpdateCombo()
+    private void UpdateCombo()
     {
         if (animator == null)
         {
@@ -515,7 +538,7 @@ private void UpdateCombo()
     /// slashEffectLocalOffset만큼 띄운 위치에 풀링된 Slash_Normal 이펙트를 소환한다.
     /// UpdateCombo에서 콤보 입력이 성공할 때마다 slashEffectTriggerDelay후 호출된다.
     /// </summary>
-private void PlayAttackSlashEffect()
+    private void PlayAttackSlashEffect()
     {
         SlashEffectPose pose = GetSlashEffectPose(pendingSlashEffectComboStep);
         SpawnSlashEffect(pose, currentComboEffectKey);
@@ -570,11 +593,16 @@ private void PlayAttackSlashEffect()
     /// A/D/F 스킬 클립 길이와, S(삼단베기)를 구성하는 Combo01~03 클립 길이의 합을 미리 읽어둔다.
     /// 이 값만큼 뒤에 SkillIndex를 0으로 되돌려 애니메이션이 끝나는 시점과 맞춘다.
     /// </summary>
-    private void CacheSkillAnimationDurations()
+private void CacheSkillAnimationDurations()
     {
         for (int i = 0; i < skillAnimationDurations.Length; i++)
         {
             skillAnimationDurations[i] = FallbackSkillClipLength;
+        }
+
+        for (int i = 0; i < tripleSlashClipLengths.Length; i++)
+        {
+            tripleSlashClipLengths[i] = FallbackComboClipLength;
         }
 
         if (animator.runtimeAnimatorController == null)
@@ -608,6 +636,7 @@ private void PlayAttackSlashEffect()
             {
                 if (clip.name == TripleSlashClipNames[i])
                 {
+                    tripleSlashClipLengths[i] = clip.length;
                     tripleSlashTotal += clip.length;
                 }
             }
@@ -645,14 +674,7 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
         if (slot != UI_GameSceneView.PlayerSkillSlot.D)
         {
             pendingSkillSlot = slot;
-            if (skillEffectTriggerDelay > 0f)
-            {
-                Invoke(nameof(PlaySkillSlashEffect), skillEffectTriggerDelay);
-            }
-            else
-            {
-                PlaySkillSlashEffect();
-            }
+            ScheduleSkillEffects(slot);
         }
 
         CancelInvoke(nameof(FinishSkillAnimation));
@@ -661,6 +683,43 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
         if (slot == UI_GameSceneView.PlayerSkillSlot.D)
         {
             ActivateFireForceBuff();
+        }
+    }
+
+    /// <summary>
+    /// slot에 대응하는 스킬 이펙트 소환을 예약한다. S(삼단베기)는 Combo01~03 세 번의 타격이
+    /// 순차적으로 재생되므로, 각 타격이 시작되는 시점(누적 클립 길이)마다 skillEffectTriggerDelay를 더해
+    /// 이펙트를 세 번 나눠 소환한다. 그 외 슬롯은 기존처럼 skillEffectTriggerDelay 후 한 번만 소환한다.
+    /// </summary>
+    private void ScheduleSkillEffects(UI_GameSceneView.PlayerSkillSlot slot)
+    {
+        if (slot == UI_GameSceneView.PlayerSkillSlot.S)
+        {
+            float elapsed = 0f;
+            for (int i = 0; i < tripleSlashClipLengths.Length; i++)
+            {
+                float delay = elapsed + skillEffectTriggerDelay;
+                if (delay > 0f)
+                {
+                    Invoke(nameof(PlaySkillSlashEffect), delay);
+                }
+                else
+                {
+                    PlaySkillSlashEffect();
+                }
+
+                elapsed += tripleSlashClipLengths[i];
+            }
+            return;
+        }
+
+        if (skillEffectTriggerDelay > 0f)
+        {
+            Invoke(nameof(PlaySkillSlashEffect), skillEffectTriggerDelay);
+        }
+        else
+        {
+            PlaySkillSlashEffect();
         }
     }
 
@@ -688,7 +747,7 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
     /// pose(로컬 오프셋/회전)를 캐릭터의 현재 transform 기준 월드 좌표로 변환해 풀링된 Slash_Normal
     /// 이펙트를 소환한다. 콤보 공격/스킬 이펙트가 공통으로 사용하는 실제 스폰 로직이다.
     /// </summary>
-private void SpawnSlashEffect(SlashEffectPose pose, string effectKey)
+private void SpawnSlashEffect(SlashEffectPose pose, string effectKey, float? syncDurationSeconds = null)
     {
         if (ObjectPoolController.Instance == null || string.IsNullOrEmpty(effectKey))
         {
@@ -698,7 +757,12 @@ private void SpawnSlashEffect(SlashEffectPose pose, string effectKey)
         Vector3 spawnPosition = transform.TransformPoint(pose.localOffset);
         Quaternion spawnRotation = transform.rotation * Quaternion.Euler(pose.localEulerAngles);
 
-        ObjectPoolController.Instance.Get(effectKey, spawnPosition, spawnRotation);
+        GameObject effectInstance = ObjectPoolController.Instance.Get(effectKey, spawnPosition, spawnRotation);
+
+        if (syncDurationSeconds.HasValue)
+        {
+            SyncParticleDurationToTarget(effectInstance, syncDurationSeconds.Value);
+        }
     }
 
     /// <summary>
@@ -708,7 +772,63 @@ private void PlaySkillSlashEffect()
     {
         SlashEffectPose pose = GetSkillEffectPose(pendingSkillSlot);
         string effectKey = GetSkillEffectKey(pendingSkillSlot);
-        SpawnSlashEffect(pose, effectKey);
+
+        // F(회전베기)는 WheelWindNormal 이펙트의 자체 재생 시간이 스킬 애니메이션보다 훨씬 길어
+        // 애니메이션이 끝난 뒤에도 이펙트만 남아 재생되는 문제가 있어, 둘이 동시에 끝나도록
+        // 이펙트의 simulationSpeed를 맞추다.
+        float? syncDurationSeconds = null;
+        if (pendingSkillSlot == UI_GameSceneView.PlayerSkillSlot.F)
+        {
+            int index = (int)pendingSkillSlot;
+            float animationDuration = index < skillAnimationDurations.Length ? skillAnimationDurations[index] : FallbackSkillClipLength;
+            float remainingAnimationTime = animationDuration - skillEffectTriggerDelay;
+            syncDurationSeconds = Mathf.Max(remainingAnimationTime, MinEffectSyncDuration);
+        }
+
+        SpawnSlashEffect(pose, effectKey, syncDurationSeconds);
+    }
+
+    /// <summary>
+    /// effectInstance(및 자식)에 포함된 모든 ParticleSystem의 simulationSpeed를 조정해,
+    /// 원래 재생 시간(startDelay+duration+startLifetime 기준 가장 늘게 끝나는 자식 파티클 기준)과 무관하게
+    /// targetDurationSeconds 안에 재생이 끝나도록 맞추다. PooledParticleEffect가 IsAlive(withChildren:true)로
+    /// 반환 시점을 판단하므로, 가장 늘게 끝나는 자식 기준으로 배율을 계산해 전체가 함께 끝나도록 한다.
+    /// duration/startDelay/startLifetime은 simulationSpeed의 영향을 받지 않는 값이라, 풀에서 재사용되어도
+    /// 매번 원본 기준으로 정확하게 재계산된다.
+    /// </summary>
+    private static void SyncParticleDurationToTarget(GameObject effectInstance, float targetDurationSeconds)
+    {
+        if (effectInstance == null || targetDurationSeconds <= 0f)
+        {
+            return;
+        }
+
+        ParticleSystem[] particleSystems = effectInstance.GetComponentsInChildren<ParticleSystem>(true);
+        if (particleSystems.Length == 0)
+        {
+            return;
+        }
+
+        float naturalDurationSeconds = 0f;
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem.MainModule main = particleSystems[i].main;
+            float end = main.startDelay.constantMax + main.duration + (main.loop ? 0f : main.startLifetime.constantMax);
+            naturalDurationSeconds = Mathf.Max(naturalDurationSeconds, end);
+        }
+
+        if (naturalDurationSeconds <= 0f)
+        {
+            return;
+        }
+
+        float simulationSpeed = Mathf.Clamp(naturalDurationSeconds / targetDurationSeconds, MinEffectSimulationSpeed, MaxEffectSimulationSpeed);
+
+        for (int i = 0; i < particleSystems.Length; i++)
+        {
+            ParticleSystem.MainModule main = particleSystems[i].main;
+            main.simulationSpeed = simulationSpeed;
+        }
     }
 
     /// <summary>
@@ -748,7 +868,7 @@ private void PlaySkillSlashEffect()
     /// 콤보와 다른 키로 바뀌어도(예: 속성별 이펙트) 첫 사용 시점에 "아직 로드 안 됨" 오류가 나지 않도록
     /// 겹치지 않는 키만 모아 함께 프리로드한다.
     /// </summary>
-private void PreloadEffectPools()
+    private void PreloadEffectPools()
     {
         ObjectPoolController.Instance?.Preload(SlashEffectKey, SlashEffectPrewarmCount);
         ObjectPoolController.Instance?.Preload(SlashFireForceEffectKey, SlashEffectPrewarmCount);
@@ -776,7 +896,7 @@ private void PreloadEffectPools()
     /// FireForceBuffDuration(8초) 후 자동으로 원래(SlashEffectKey)로 되돌린다. 재사용 시 기존
     /// 타이머를 취소하고 새로 8초를 재장한다(중첩되지 않고 갱신된다).
     /// </summary>
-private void ActivateFireForceBuff()
+    private void ActivateFireForceBuff()
     {
         currentComboEffectKey = SlashFireForceEffectKey;
 
@@ -796,7 +916,7 @@ private void ActivateFireForceBuff()
     }
 
     /// <summary>FireForce 버프가 끝나면 기본 공격 이펙트를 원래(SlashEffectKey)로 되돌립다.</summary>
-private void DeactivateFireForceBuff()
+    private void DeactivateFireForceBuff()
     {
         currentComboEffectKey = SlashEffectKey;
 
@@ -815,7 +935,7 @@ private void DeactivateFireForceBuff()
     /// 켜기 전까지는 보이지 않는다. 루프 파티클이라 풀링(SpawnSlashEffect)이 아니라
     /// 인스턴스 하나를 계속 재사용(SetActive 토글)한다.
     /// </summary>
-private void LoadAttributeAssignmentEffect()
+    private void LoadAttributeAssignmentEffect()
     {
         if (AddressableAssetController.Instance == null)
         {

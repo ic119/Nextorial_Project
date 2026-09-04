@@ -786,7 +786,6 @@ GameObject:
   m_Component:
   - component: {fileID: 5710618205589619760}
   - component: {fileID: 1509162604586843873}
-  - component: {fileID: 6103877805790115812}
   m_Layer: 5
   m_Name: Slot_F
   m_TagString: Untagged
@@ -823,36 +822,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2502247740838465524}
   m_CullTransparentMesh: 1
---- !u!114 &6103877805790115812
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2502247740838465524}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &2626715570019848455
 GameObject:
   m_ObjectHideFlags: 0
@@ -938,7 +907,6 @@ GameObject:
   m_Component:
   - component: {fileID: 5531566438381233776}
   - component: {fileID: 8344370068047947767}
-  - component: {fileID: 4061342822773482650}
   m_Layer: 5
   m_Name: Slot_R
   m_TagString: Untagged
@@ -975,36 +943,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2698417161833069982}
   m_CullTransparentMesh: 1
---- !u!114 &4061342822773482650
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2698417161833069982}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &2715951354288512637
 GameObject:
   m_ObjectHideFlags: 0
@@ -1051,7 +989,6 @@ GameObject:
   m_Component:
   - component: {fileID: 250458328062915846}
   - component: {fileID: 3444786377199738946}
-  - component: {fileID: 4132199590313219530}
   m_Layer: 5
   m_Name: Slot_E
   m_TagString: Untagged
@@ -1088,36 +1025,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2794013804763692784}
   m_CullTransparentMesh: 1
---- !u!114 &4132199590313219530
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2794013804763692784}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &3137458093004304571
 GameObject:
   m_ObjectHideFlags: 0
@@ -1995,7 +1902,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1403728250458713952}
   - component: {fileID: 3424579386634696955}
-  - component: {fileID: 2168212155035618170}
   m_Layer: 5
   m_Name: Slot_Q
   m_TagString: Untagged
@@ -2032,36 +1938,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4800709977533399460}
   m_CullTransparentMesh: 1
---- !u!114 &2168212155035618170
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4800709977533399460}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &5026079993466346899
 GameObject:
   m_ObjectHideFlags: 0
@@ -2209,7 +2085,6 @@ GameObject:
   m_Component:
   - component: {fileID: 4386501540808029258}
   - component: {fileID: 4698988549507565798}
-  - component: {fileID: 4811370098555286826}
   m_Layer: 5
   m_Name: Slot_A
   m_TagString: Untagged
@@ -2246,36 +2121,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5054371614322282985}
   m_CullTransparentMesh: 1
---- !u!114 &4811370098555286826
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5054371614322282985}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &5433576973554311360
 GameObject:
   m_ObjectHideFlags: 0
@@ -2459,7 +2304,6 @@ GameObject:
   m_Component:
   - component: {fileID: 7897077511459083648}
   - component: {fileID: 5169293382705611515}
-  - component: {fileID: 3041844086881050439}
   m_Layer: 5
   m_Name: Slot_D
   m_TagString: Untagged
@@ -2496,36 +2340,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5601915013397770732}
   m_CullTransparentMesh: 1
---- !u!114 &3041844086881050439
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5601915013397770732}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &5738021496044477015
 GameObject:
   m_ObjectHideFlags: 0
@@ -2737,7 +2551,6 @@ GameObject:
   m_Component:
   - component: {fileID: 8736567052112545547}
   - component: {fileID: 7597444998759599503}
-  - component: {fileID: 2466363034624948175}
   m_Layer: 5
   m_Name: Slot_S
   m_TagString: Untagged
@@ -2774,36 +2587,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7184196976190920731}
   m_CullTransparentMesh: 1
---- !u!114 &2466363034624948175
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7184196976190920731}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &7293742784725426410
 GameObject:
   m_ObjectHideFlags: 0
@@ -2814,7 +2597,6 @@ GameObject:
   m_Component:
   - component: {fileID: 746452488583989081}
   - component: {fileID: 9113907984805610451}
-  - component: {fileID: 1771361324391683193}
   m_Layer: 5
   m_Name: Slot_W
   m_TagString: Untagged
@@ -2851,36 +2633,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7293742784725426410}
   m_CullTransparentMesh: 1
---- !u!114 &1771361324391683193
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7293742784725426410}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!1 &7353871199486425892
 GameObject:
   m_ObjectHideFlags: 0
@@ -3493,14 +3245,14 @@ MonoBehaviour:
   expValueLabel: {fileID: 4535573344340069347}
   hpDrainSpeed: 80
   expGainSpeed: 40
-  SkillSlotA: {fileID: 4811370098555286826}
-  SkillSlotS: {fileID: 2466363034624948175}
-  SkillSlotD: {fileID: 3041844086881050439}
-  SkillSlotF: {fileID: 6103877805790115812}
-  skillSlotQ: {fileID: 2168212155035618170}
-  skillSlotW: {fileID: 1771361324391683193}
-  skillSlotE: {fileID: 4132199590313219530}
-  skillSlotR: {fileID: 4061342822773482650}
+  SkillSlotA: {fileID: 1502078499811148983}
+  SkillSlotS: {fileID: 1527328208674265032}
+  SkillSlotD: {fileID: 775312253761309459}
+  SkillSlotF: {fileID: 2870945900936684105}
+  skillSlotQ: {fileID: 1983948891317859559}
+  skillSlotW: {fileID: 2073799086311418379}
+  skillSlotE: {fileID: 369081700488862929}
+  skillSlotR: {fileID: 3229455417153420009}
   playerSkillCooldownVisuals:
   - cooldownFillImage: {fileID: 0}
     cooldownText: {fileID: 0}
@@ -3510,7 +3262,18 @@ MonoBehaviour:
     cooldownText: {fileID: 0}
   - cooldownFillImage: {fileID: 0}
     cooldownText: {fileID: 0}
-  cooldownIconTint: {r: 0.4, g: 0.4, b: 0.4, a: 1}
+  dragonSkillCooldownVisuals:
+  - cooldownFillImage: {fileID: 0}
+    cooldownText: {fileID: 0}
+  - cooldownFillImage: {fileID: 0}
+    cooldownText: {fileID: 0}
+  - cooldownFillImage: {fileID: 0}
+    cooldownText: {fileID: 0}
+  - cooldownFillImage: {fileID: 0}
+    cooldownText: {fileID: 0}
+  cooldownIconTint: {r: 0.3207547, g: 0.3207547, b: 0.3207547, a: 1}
+  cooldownStartColor: {r: 0.75, g: 0.15, b: 0.15, a: 0.7}
+  cooldownEndColor: {r: 0.2, g: 0.85, b: 0.35, a: 0.35}
 --- !u!1 &7901635538131561494
 GameObject:
   m_ObjectHideFlags: 0

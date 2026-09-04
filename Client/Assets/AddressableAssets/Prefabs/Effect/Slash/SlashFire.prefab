@@ -19381,7 +19381,7 @@ GameObject:
   - component: {fileID: 8673528633899137396}
   - component: {fileID: 4341291281777469660}
   m_Layer: 0
-  m_Name: SlashFireForce
+  m_Name: SlashFire
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

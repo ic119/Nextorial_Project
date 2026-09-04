@@ -12,7 +12,21 @@ public enum AddressableKey
     TileRockFloor,
     TileStairs,
     SlashNormal,
-    SkillDataModelSO
+    WheelWindNormal,
+    SkillDataModelSO,
+    DragonSkillDataModelSO
+}
+
+/// <summary>
+/// 드래곤 스킬 슬롯(Q/W/E/R). PlayerSkillSlot(A/S/D/F)과 동일한 방식으로,
+/// 리스트 순서가 아니라 이 값으로 슬롯을 찾는다.
+/// </summary>
+public enum DragonSkillSlot
+{
+    Q = 0,
+    W = 1,
+    E = 2,
+    R = 3
 }
 
 public enum DragonType
