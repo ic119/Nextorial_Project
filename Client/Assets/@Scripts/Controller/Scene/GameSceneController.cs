@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class GameSceneController : MonoBehaviour
@@ -14,6 +15,11 @@ public class GameSceneController : MonoBehaviour
     [SerializeField] private Transform dragonSpawnPoint;
     [SerializeField] private Vector3 dragonSpawnOffset = new Vector3(-2f, 0f, 0f);
 
+    [Header("Monster Spawn Settings")]
+    [Tooltip("몬스터를 스폰할 위치들. 비어있으면 characterSpawnPoint/defaultSpawnPosition 기준 monsterSpawnOffset 위치에 1마리만 스폰한다.")]
+    [SerializeField] private Transform[] monsterSpawnPoints;
+    [SerializeField] private Vector3 monsterSpawnOffset = new Vector3(3f, 0f, 0f);
+
     /// <summary>
     /// 유저 캐릭터와 드래곤이 GameScene에 스폰될 때 공통으로 바라볼 초기 방향(Vector3.right).
     /// PlayerController/DragonController의 오른쪽 이동 회전값(90도)과 동일하다.
@@ -25,6 +31,7 @@ public class GameSceneController : MonoBehaviour
     private GameObject spawnedCharacter;
     private GameObject spawnedDragon;
     private DragonController spawnedDragonController;
+    private readonly List<MonsterController> spawnedMonsterControllers = new List<MonsterController>();
 
 
 
@@ -52,6 +59,7 @@ private SkillDataModelSO skillDataModel;
     {
         SpawnPlayerCharacter();
         SpawnPlayerDragon();
+        SpawnMonsters();
         LoadGameSceneUI();
         LoadSkillData();
         LoadDragonSkillData();
@@ -113,11 +121,13 @@ if (spawnedKeyboardInput != null)
             var characterModel = spawnedCharacter.GetComponent<PlayerCharacterModel>();
             characterModel?.ApplyHealth(userData.maxHp, userData.currentHp);
             characterModel?.ApplyExp(userData.userExp);
+            characterModel?.ApplyCombatStat(userData.userStats);
 
             spawnedCharacterModel = characterModel;
             cachedUserData = userData;
             TryBindGameSceneView();
             TryWireDragonFollowTarget();
+            TryWireMonsterTargets();
 
             // KeyboardInputController(SingletonObject)를 PlayerController보다 먼저 붙여, PlayerController.Awake()가
             // KeyboardInputController.Instance를 처음 참조할 때 이미 이 캐릭터에 붙은 인스턴스를 쓰도록 한다.
@@ -224,6 +234,80 @@ spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
             DebugLogController.GenerateLogMessage<GameSceneController>(
                 $"드래곤 스폰 완료: {dragonData.dragonID} (Lv.{dragonData.dragonLevel})");
         });
+    }
+
+    /// <summary>
+    /// monsterSpawnPoints가 지정되어 있으면 각 위치에 NormalMonster를 하나씩 스폰하고, 지정된 것이 없으면
+    /// characterSpawnPoint/defaultSpawnPosition 기준 monsterSpawnOffset 위치에 1마리만 스폰한다.
+    /// 몬스터는 PlayerCharacter/PlayerDragon과 달리 스폰 이후 개별 참조를 유지할 필요가 없다(체력/사망 처리는 MonsterModel이 자체적으로 처리한다).
+    /// </summary>
+    private void SpawnMonsters()
+    {
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("AddressableAssetController.Instance가 없어 몬스터를 스폰할 수 없습니다.");
+            return;
+        }
+
+        string key = AddressableKey.NormalMonster.ToString();
+        Vector3[] spawnPositions = GetMonsterSpawnPositions();
+
+        foreach (Vector3 spawnPosition in spawnPositions)
+        {
+            AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(key, prefab =>
+            {
+                if (prefab == null)
+                {
+                    DebugLogController.GenerateErrorMessage<GameSceneController>($"몬스터 프리팹 로드 실패 Key : {key}");
+                    return;
+                }
+
+                GameObject monster = AddressableAssetController.Instance.InstantiatePrefab(prefab);
+                monster.name = "NormalMonster";
+                monster.transform.SetPositionAndRotation(spawnPosition, InitialFacingRotation);
+
+                MonsterController monsterController = monster.GetComponent<MonsterController>();
+                if (monsterController != null)
+                {
+                    spawnedMonsterControllers.Add(monsterController);
+                    TryWireMonsterTargets();
+                }
+
+                var animator = monster.GetComponent<Animator>();
+                if (animator != null)
+                {
+                    animator.applyRootMotion = false;
+                }
+
+                var skinnedRenderers = monster.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                for (int i = 0; i < skinnedRenderers.Length; i++)
+                {
+                    skinnedRenderers[i].updateWhenOffscreen = true;
+                }
+
+                DebugLogController.GenerateLogMessage<GameSceneController>($"몬스터 스폰 완료: {monster.name} at {spawnPosition}");
+            });
+        }
+    }
+
+    /// <summary>
+    /// monsterSpawnPoints가 비어있으면 characterSpawnPoint/defaultSpawnPosition에 monsterSpawnOffset만큼 띄운 위치 1개만 반환하고,
+    /// 지정되어 있으면 각 Transform의 위치를 그대로 반환한다.
+    /// </summary>
+    private Vector3[] GetMonsterSpawnPositions()
+    {
+        if (monsterSpawnPoints != null && monsterSpawnPoints.Length > 0)
+        {
+            Vector3[] positions = new Vector3[monsterSpawnPoints.Length];
+            for (int i = 0; i < monsterSpawnPoints.Length; i++)
+            {
+                positions[i] = monsterSpawnPoints[i] != null ? monsterSpawnPoints[i].position : defaultSpawnPosition;
+            }
+            return positions;
+        }
+
+        Vector3 basePosition = characterSpawnPoint != null ? characterSpawnPoint.position : defaultSpawnPosition;
+        return new[] { basePosition + monsterSpawnOffset };
     }
 
 
@@ -365,6 +449,25 @@ gameSceneView = view;
         spawnedDragonController.SetFollowTarget(spawnedCharacter.transform);
     }
 
+    /// <summary>
+    /// 캐릭터 스폰과 몬스터 스폰(둘 다 독립적인 비동기 Addressable 로드)의 완료 순서가 보장되지 않으므로,
+    /// 유저 캐릭터가 준비되어 있으면 그 시점까지 스폰된 모든 몬스터에게 추적 대상을 연결해준다.
+    /// 몬스터가 나중에 추가로 스폰되는 경우를 대비해 캐릭터 스폰 완료 시점과 몬스터 스폰 완료 시점
+    /// 양쪽에서 이 메서드를 호출한다.
+    /// </summary>
+    private void TryWireMonsterTargets()
+    {
+        if (spawnedCharacter == null)
+        {
+            return;
+        }
+
+        foreach (MonsterController monsterController in spawnedMonsterControllers)
+        {
+            monsterController?.SetTarget(spawnedCharacter.transform);
+        }
+    }
+
 
     /// <summary>
     /// MapTile(BoxCollider) 지형과 충돌할 수 있도록 Rigidbody/CapsuleCollider를 부착한다.
@@ -387,7 +490,7 @@ gameSceneView = view;
 
 /// <summary>
     /// KeyboardInputController에서 A/S/D/F 스킬 키가 눌렸을 때 호출된다. UI_GameSceneView의
-    /// 쿸타임 기능을 호출해 해당 슬롯을 쿸타임 상태로 전환한다(실제 스킬 효과/데미지는 아직 없다).
+    /// 쿨타임 기능을 호출해 해당 슬롯을 쿨타임 상태로 전환하고, 성공하면 PlayerController.PlaySkillAnimation으로 애니메이션 재생과 데미지 판정을 함께 요청한다.
     /// </summary>
     private void HandleSkillKeyPressed(UI_GameSceneView.PlayerSkillSlot slot)
     {
@@ -409,7 +512,7 @@ gameSceneView = view;
             return;
         }
 
-        spawnedPlayerController?.PlaySkillAnimation(slot);
+        spawnedPlayerController?.PlaySkillAnimation(slot, skill.damage);
 
         DebugLogController.GenerateLogMessage<GameSceneController>(
             $"스킬 사용: {skill.skillName} (슬롯:{slot}, 데미지:{skill.damage}, 쿸타임:{skill.cooldown}초)");

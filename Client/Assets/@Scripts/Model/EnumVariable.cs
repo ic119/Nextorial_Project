@@ -6,6 +6,7 @@ public enum AddressableKey
     UI_GameScene,
     BasicCharacter,
     BasicDragon,
+    NormalMonster,
     Tile001,
     Tile002,
     TileFloor,

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 /// <summary>
 /// KeyboardInputController로부터 좌우 이동 축과 점프/공격 이벤트를 받아 Rigidbody를 통해 캐릭터를 X축으로 이동시킨다.
@@ -99,6 +99,7 @@ public class PlayerController : MonoBehaviour
 
 
     private UI_GameSceneView.PlayerSkillSlot pendingSkillSlot;
+    private int pendingSkillDamage;
 
     private const string AttributeAssignmentEffectKey = "AttributeAssignmentEffect";
 
@@ -183,6 +184,16 @@ public class PlayerController : MonoBehaviour
     private Rigidbody rb;
     private Animator animator;
     private PlayerCharacterModel characterModel;
+    private CombatStatComponent combatStat;
+
+    [Header("Attack Hit Detection")]
+    [Tooltip("공격 판정 원점(캐릭터 기준 로컬 오프셋). 콤보/스킬 공통으로 사용한다.")]
+    [SerializeField] private Vector3 hitDetectionLocalOffset = new Vector3(0f, 1f, 1f);
+    [SerializeField] private float hitDetectionRadius = 1f;
+    [Tooltip("데미지 판정에 포함할 레이어. 기본은 전체 레이어이며, 적 전용 레이어가 생기면 그 레이어만 선택하는 것을 권장한다.")]
+    [SerializeField] private LayerMask hitDetectionTargetMask = ~0;
+
+    private static readonly Collider[] hitDetectionBuffer = new Collider[16];
     private PlayerMoveState currentMoveState = PlayerMoveState.IsIdle;
     private bool jumpRequested;
     private bool isGrounded = true;
@@ -210,6 +221,7 @@ public class PlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
         characterModel = GetComponent<PlayerCharacterModel>();
+        combatStat = GetComponent<CombatStatComponent>();
 
         if (characterModel == null)
         {
@@ -538,10 +550,42 @@ public class PlayerController : MonoBehaviour
     /// slashEffectLocalOffset만큼 띄운 위치에 풀링된 Slash_Normal 이펙트를 소환한다.
     /// UpdateCombo에서 콤보 입력이 성공할 때마다 slashEffectTriggerDelay후 호출된다.
     /// </summary>
+    private void TryDealDamage(int skillDamage)
+    {
+        if (combatStat == null)
+        {
+            return;
+        }
+
+        Vector3 origin = transform.TransformPoint(hitDetectionLocalOffset);
+        int hitCount = Physics.OverlapSphereNonAlloc(origin, hitDetectionRadius, hitDetectionBuffer, hitDetectionTargetMask, QueryTriggerInteraction.Collide);
+
+        if (hitCount == 0)
+        {
+            return;
+        }
+
+        int rawDamage = CombatCalculator.CalculateAttackDamage(combatStat.AttackPower, skillDamage);
+        DamageInfo damageInfo = new DamageInfo(rawDamage, gameObject);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = hitDetectionBuffer[i];
+            if (hitCollider.transform.root == transform.root)
+            {
+                continue;
+            }
+
+            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
+            damageable?.TakeDamage(damageInfo);
+        }
+    }
+
     private void PlayAttackSlashEffect()
     {
         SlashEffectPose pose = GetSlashEffectPose(pendingSlashEffectComboStep);
         SpawnSlashEffect(pose, currentComboEffectKey);
+        TryDealDamage(0);
     }
 
 
@@ -653,7 +697,7 @@ private void CacheSkillAnimationDurations()
     /// 콤보 공격 중이거나 이미 다른 스킬이 재생 중이면 무시한다(같은 레이어를 공유하므로 상호 배제).
     /// GameSceneController가 UI_GameSceneView.TryStartPlayerSkillCooldown이 성공했을 때만 호출한다.
     /// </summary>
-public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
+public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot, int skillDamage)
     {
         if (animator == null || comboStep > 0 || isSkillPlaying)
         {
@@ -674,6 +718,7 @@ public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot)
         if (slot != UI_GameSceneView.PlayerSkillSlot.D)
         {
             pendingSkillSlot = slot;
+            pendingSkillDamage = skillDamage;
             ScheduleSkillEffects(slot);
         }
 
@@ -786,6 +831,7 @@ private void PlaySkillSlashEffect()
         }
 
         SpawnSlashEffect(pose, effectKey, syncDurationSeconds);
+        TryDealDamage(pendingSkillDamage);
     }
 
     /// <summary>

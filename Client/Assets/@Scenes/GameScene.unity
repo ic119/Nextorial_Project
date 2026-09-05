@@ -119,6 +119,37 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &2261654
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2261655}
+  m_Layer: 0
+  m_Name: MonsterPostion (2)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2261655
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2261654}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 88.7, y: 4.8, z: 2.4}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2145891039}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &6485772
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -613,6 +644,13 @@ MonoBehaviour:
   cameraZoomController: {fileID: 1786095643}
   characterSpawnPoint: {fileID: 785443205}
   defaultSpawnPosition: {x: 1, y: 1.5, z: 0}
+  dragonSpawnPoint: {fileID: 0}
+  dragonSpawnOffset: {x: -2, y: 0, z: 0}
+  monsterSpawnPoints:
+  - {fileID: 1889169631}
+  - {fileID: 1561748601}
+  - {fileID: 2261655}
+  monsterSpawnOffset: {x: 3, y: 0, z: 0}
 --- !u!4 &248525503
 Transform:
   m_ObjectHideFlags: 0
@@ -1698,6 +1736,37 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 928743860918889175, guid: 85da86801cce837468434645505d5895, type: 3}
   m_PrefabInstance: {fileID: 1342718373}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1561748600
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1561748601}
+  m_Layer: 0
+  m_Name: MonsterPostion (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1561748601
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1561748600}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 68, y: 4.8, z: 2.4}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2145891039}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1571033574
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2237,6 +2306,37 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 928743860918889175, guid: 85da86801cce837468434645505d5895, type: 3}
   m_PrefabInstance: {fileID: 1852853096}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1889169630
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1889169631}
+  m_Layer: 0
+  m_Name: MonsterPostion
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1889169631
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1889169630}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 37.8, y: 4.8, z: 2.4}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2145891039}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1937802850
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2831,6 +2931,9 @@ Transform:
   m_Children:
   - {fileID: 1990834536}
   - {fileID: 785443205}
+  - {fileID: 1889169631}
+  - {fileID: 1561748601}
+  - {fileID: 2261655}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807

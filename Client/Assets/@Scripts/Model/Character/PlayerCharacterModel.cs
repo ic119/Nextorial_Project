@@ -1,5 +1,6 @@
-﻿using UnityEngine;
+using UnityEngine;
 
+[RequireComponent(typeof(HealthComponent), typeof(CombatStatComponent))]
 public class PlayerCharacterModel : MonoBehaviour
 {
     #region Variable
@@ -24,23 +25,33 @@ public class PlayerCharacterModel : MonoBehaviour
     [SerializeField] private GameObject singleSwordWeaponObject;
 
     /// <summary>
-    /// 세이브 데이터(UserSaveData.maxHp/currentHp, userExp)로부터 GameSceneController가 채워주는
-    /// 런타임 상태. ApplyHealth/ApplyExp로 초기화된 뒤에는 TakeDamage/GainExp로 갱신된다.
+    /// 세이브 데이터(UserSaveData.userExp)로부터 GameSceneController가 채워주는 경험치 런타임 상태.
+    /// ApplyExp로 초기화된 뒤에는 GainExp로 갱신된다. 체력/공격력/방어력은 각각 HealthComponent/CombatStatComponent가 전담한다.
     /// UI_GameSceneView는 이 값을 계속 폴링해 슬라이더 연출에 사용한다.
     /// </summary>
-    private int maxHp;
-    private int currentHp;
     private float currentExp;
+    private HealthComponent healthComponent;
+    private CombatStatComponent combatStatComponent;
 
     public WeaponType CurrentWeaponType => currentWeaponType;
-    public int MaxHp => maxHp;
-    public int CurrentHp => currentHp;
+    public int MaxHp => healthComponent.MaxHp;
+    public int CurrentHp => healthComponent.CurrentHp;
     public float CurrentExp => currentExp;
+    public int AttackPower => combatStatComponent.AttackPower;
+    public int Defense => combatStatComponent.Defense;
     #endregion
 
     #region LifeCycle
     private void Awake()
     {
+        healthComponent = GetComponent<HealthComponent>();
+        combatStatComponent = GetComponent<CombatStatComponent>();
+
+        if (healthComponent == null || combatStatComponent == null)
+        {
+            DebugLogController.GenerateErrorMessage<PlayerCharacterModel>("HealthComponent/CombatStatComponent가 없어 체력/공격력 계산이 동작하지 않습니다.");
+        }
+
         EquipWeapon(currentWeaponType);
     }
     #endregion
@@ -62,25 +73,19 @@ public class PlayerCharacterModel : MonoBehaviour
 
     /// <summary>
     /// 세이브 데이터의 체력값을 캐릭터에 반영한다(스폰 시 최초 1회). currentHp가 maxHp를 넘거나
-    /// 음수가 되지 않도록 보정한다. 이후 전투 중 체력 변화는 TakeDamage를 사용한다.
+    /// 음수가 되지 않도록 보정한다. 이후 전투 중 체력 변화는 HealthComponent.TakeDamage(IDamageable 구현)로 처리된다.
     /// </summary>
     public void ApplyHealth(int newMaxHp, int newCurrentHp)
     {
-        maxHp = Mathf.Max(0, newMaxHp);
-        currentHp = Mathf.Clamp(newCurrentHp, 0, maxHp);
+        healthComponent.ApplyHealth(newMaxHp, newCurrentHp);
     }
 
     /// <summary>
-    /// 피격 등으로 damage만큼 체력을 깎는다. maxHp/음수 범위를 벗어나지 않도록 클램프한다.
+    /// 세이브 데이터의 UserStats(str/agi/intel)로부터 공격력/방어력을 계산해 반영한다(스폰 시 최초 1회).
     /// </summary>
-    public void TakeDamage(int damage)
+    public void ApplyCombatStat(UserStats userStats)
     {
-        if (damage <= 0)
-        {
-            return;
-        }
-
-        currentHp = Mathf.Clamp(currentHp - damage, 0, maxHp);
+        combatStatComponent.ApplyFromUserStats(userStats);
     }
 
     /// <summary>

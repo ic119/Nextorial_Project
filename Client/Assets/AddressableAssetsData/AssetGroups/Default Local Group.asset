@@ -40,6 +40,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4ab9991fcdea49c479c9634b9f9a3820
+    m_Address: NormalMonster
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 5412227fdcafcf749ad17363855df435
     m_Address: BasicDragon
     m_ReadOnly: 0
@@ -97,6 +102,11 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: dc33d935d548c15458402091bb606c9f
     m_Address: ProgressBar
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e43f7696fcc9ff84aa4f9e652c687fbb
+    m_Address: BossCharacter
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
