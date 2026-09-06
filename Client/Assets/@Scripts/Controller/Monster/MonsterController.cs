@@ -62,7 +62,7 @@ public class MonsterController : MonoBehaviour
     #endregion
 
     #region LifeCycle
-    private void Awake()
+private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         if (rb == null)
@@ -73,6 +73,10 @@ public class MonsterController : MonoBehaviour
 
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.constraints = RigidbodyConstraints.FreezeRotation | RigidbodyConstraints.FreezePositionZ;
+        // 몬스터들이 플레이어를 쫓아 한곳에 몰리면서 서로 겹칠 때 발생하는 순간적인 고속 분리(depenetration)가
+        // 얇은 GroundCollider_Unified(두께 0.15)를 Discrete 판정으로 통과해버려 바닥을 뚫고 무한 낙하하는
+        // 문제가 있었다. Continuous로 바꿔 고속 이동 시에도 정적 콜라이더와의 충돌을 놓치지 않게 한다.
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
         animator = GetComponent<Animator>();
         combatStat = GetComponent<CombatStatComponent>();

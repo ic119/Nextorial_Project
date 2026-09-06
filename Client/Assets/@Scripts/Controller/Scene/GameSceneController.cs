@@ -241,7 +241,7 @@ spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
     /// characterSpawnPoint/defaultSpawnPosition 기준 monsterSpawnOffset 위치에 1마리만 스폰한다.
     /// 몬스터는 PlayerCharacter/PlayerDragon과 달리 스폰 이후 개별 참조를 유지할 필요가 없다(체력/사망 처리는 MonsterModel이 자체적으로 처리한다).
     /// </summary>
-    private void SpawnMonsters()
+private void SpawnMonsters()
     {
         if (AddressableAssetController.Instance == null)
         {
@@ -258,12 +258,24 @@ spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
             {
                 if (prefab == null)
                 {
-                    DebugLogController.GenerateErrorMessage<GameSceneController>($"몬스터 프리팹 로드 실패 Key : {key}");
+                    DebugLogController.GenerateErrorMessage<GameSceneController>($"몬스터 프리합 로드 실패 Key : {key}");
                     return;
                 }
 
                 GameObject monster = AddressableAssetController.Instance.InstantiatePrefab(prefab);
                 monster.name = "NormalMonster";
+
+                // NormalMonster 프리합에는 Rigidbody가 이미 붙어있어 MonsterController.Awake()가 Instantiate 직후에
+                // rb.interpolation을 Interpolate로 설정해버린다. 그 상태에서 transform.position만 옥기면
+                // 물리 엔진이 다음 프레임에 보간 이전(스폰 직전) 위치로 Transform을 되돌려버리는 버그가 있었다.
+                // Rigidbody.position/rotation을 먼저 직접 설정해 물리 엔진 측 기준점부터 올바르게 맞춰야 텔레포트가 유지된다.
+                Rigidbody monsterRigidbody = monster.GetComponent<Rigidbody>();
+                if (monsterRigidbody != null)
+                {
+                    monsterRigidbody.position = spawnPosition;
+                    monsterRigidbody.rotation = InitialFacingRotation;
+                }
+
                 monster.transform.SetPositionAndRotation(spawnPosition, InitialFacingRotation);
 
                 MonsterController monsterController = monster.GetComponent<MonsterController>();
