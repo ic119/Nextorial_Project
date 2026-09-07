@@ -409,7 +409,7 @@ private void FinishHitReaction()
 
     /// <summary>
     /// attackHitLocalOffset/Radius 범위 안의 IDamageable 대상에게 공격력만큼 데미지를 적용한다.
-    /// 자기 자신은 제외한다. PlayerController.TryDealDamage와 동일한 구조다.
+    /// 실제 판정은 AreaDamageUtility(공용 범위 데미지 유틸)에 위임한다.
     /// </summary>
     private void DealDamage()
     {
@@ -419,27 +419,11 @@ private void FinishHitReaction()
         }
 
         Vector3 origin = transform.TransformPoint(attackHitLocalOffset);
-        int hitCount = Physics.OverlapSphereNonAlloc(origin, attackHitRadius, AttackHitBuffer, attackHitTargetMask, QueryTriggerInteraction.Collide);
-
-        if (hitCount == 0)
-        {
-            return;
-        }
-
         int rawDamage = CombatCalculator.CalculateAttackDamage(combatStat.AttackPower, 0);
-        DamageInfo damageInfo = new DamageInfo(rawDamage, gameObject);
 
-        for (int i = 0; i < hitCount; i++)
-        {
-            Collider hitCollider = AttackHitBuffer[i];
-            if (hitCollider.transform.root == transform.root)
-            {
-                continue;
-            }
-
-            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
-            damageable?.TakeDamage(damageInfo);
-        }
+        AreaDamageUtility.ApplyOverlapDamage(
+            origin, attackHitRadius, AttackHitBuffer, attackHitTargetMask,
+            transform.root, rawDamage, gameObject);
     }
 
     /// <summary>

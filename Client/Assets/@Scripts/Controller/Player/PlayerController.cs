@@ -598,27 +598,11 @@ private void FixedUpdate()
         }
 
         Vector3 origin = transform.TransformPoint(hitDetectionLocalOffset);
-        int hitCount = Physics.OverlapSphereNonAlloc(origin, hitDetectionRadius, hitDetectionBuffer, hitDetectionTargetMask, QueryTriggerInteraction.Collide);
-
-        if (hitCount == 0)
-        {
-            return;
-        }
-
         int rawDamage = CombatCalculator.CalculateAttackDamage(combatStat.AttackPower, skillDamage);
-        DamageInfo damageInfo = new DamageInfo(rawDamage, gameObject);
 
-        for (int i = 0; i < hitCount; i++)
-        {
-            Collider hitCollider = hitDetectionBuffer[i];
-            if (hitCollider.transform.root == transform.root)
-            {
-                continue;
-            }
-
-            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
-            damageable?.TakeDamage(damageInfo);
-        }
+        AreaDamageUtility.ApplyOverlapDamage(
+            origin, hitDetectionRadius, hitDetectionBuffer, hitDetectionTargetMask,
+            transform.root, rawDamage, gameObject);
     }
 
     private void PlayAttackSlashEffect()

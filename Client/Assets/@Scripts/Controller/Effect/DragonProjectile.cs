@@ -103,40 +103,13 @@ public void Launch(Vector3 direction, float speed, float distance, string onImpa
     /// </summary>
 private bool TryDealDamage()
     {
-        int hitCount = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, HitBuffer, hitTargetMask, QueryTriggerInteraction.Collide);
-        if (hitCount == 0)
-        {
-            return false;
-        }
+        // 드래곤 스킬은 동료(플레이어)에게는 데미지가 들어가서는 안 되므로, MonsterModel이 있는
+        // 대상(몬스터)에게만 적용되는 화이트리스트로 제한한다.
+        int appliedCount = AreaDamageUtility.ApplyOverlapDamage(
+            transform.position, hitRadius, HitBuffer, hitTargetMask,
+            ownerRoot, damage, ownerRoot != null ? ownerRoot.gameObject : gameObject,
+            hitCollider => hitCollider.GetComponentInParent<MonsterModel>() != null);
 
-        bool hitAny = false;
-        DamageInfo damageInfo = new DamageInfo(damage, ownerRoot != null ? ownerRoot.gameObject : gameObject);
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            Collider hitCollider = HitBuffer[i];
-            if (ownerRoot != null && hitCollider.transform.root == ownerRoot)
-            {
-                continue;
-            }
-
-            // 드래곤 스킬은 동료(플레이어)에게는 데미지가 들어가서는 안 되므로, MonsterModel이 있는
-            // 대상(몇스터)에게만 적용되는 화이트리스트로 제한한다.
-            if (hitCollider.GetComponentInParent<MonsterModel>() == null)
-            {
-                continue;
-            }
-
-            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
-            if (damageable == null)
-            {
-                continue;
-            }
-
-            damageable.TakeDamage(damageInfo);
-            hitAny = true;
-        }
-
-        return hitAny;
+        return appliedCount > 0;
     }
 }

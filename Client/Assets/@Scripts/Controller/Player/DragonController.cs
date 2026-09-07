@@ -277,32 +277,12 @@ private void SpawnMeteorStrike()
     /// </summary>
 private void DealAreaDamage(Vector3 position)
     {
-        int hitCount = Physics.OverlapSphereNonAlloc(position, skillHitRadius, SkillHitBuffer, skillHitTargetMask, QueryTriggerInteraction.Collide);
-        if (hitCount == 0)
-        {
-            return;
-        }
-
-        DamageInfo damageInfo = new DamageInfo(pendingRawDamage, gameObject);
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            Collider hitCollider = SkillHitBuffer[i];
-            if (hitCollider.transform.root == transform.root)
-            {
-                continue;
-            }
-
-            // 드래곤 스킬은 동료(플레이어)에게는 데미지가 들어가서는 안 되므로, MonsterModel이 있는
-            // 대상(몇스터)에게만 적용되는 화이트리스트로 제한한다.
-            if (hitCollider.GetComponentInParent<MonsterModel>() == null)
-            {
-                continue;
-            }
-
-            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
-            damageable?.TakeDamage(damageInfo);
-        }
+        // 드래곤 스킬은 동료(플레이어)에게는 데미지가 들어가서는 안 되므로, MonsterModel이 있는
+        // 대상(몬스터)에게만 적용되는 화이트리스트로 제한한다.
+        AreaDamageUtility.ApplyOverlapDamage(
+            position, skillHitRadius, SkillHitBuffer, skillHitTargetMask,
+            transform.root, pendingRawDamage, gameObject,
+            hitCollider => hitCollider.GetComponentInParent<MonsterModel>() != null);
     }
 
     /// <summary>Q/R 원거리 스킬이 사용하는 이펙트 풀을 Awake에서 미리 프리로드한다.</summary>
