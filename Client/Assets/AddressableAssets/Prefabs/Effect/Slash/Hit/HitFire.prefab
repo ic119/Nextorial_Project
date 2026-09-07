@@ -9716,7 +9716,7 @@ GameObject:
   - component: {fileID: 7410085620754363542}
   - component: {fileID: 2657744717365802080}
   m_Layer: 0
-  m_Name: Hit_fire
+  m_Name: HitFire
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

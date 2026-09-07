@@ -129,7 +129,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2261655}
   m_Layer: 0
-  m_Name: MonsterPostion (2)
+  m_Name: BossMonsterPostion
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -144,7 +144,7 @@ Transform:
   m_GameObject: {fileID: 2261654}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 88.7, y: 4.8, z: 2.4}
+  m_LocalPosition: {x: 116.29, y: 4.8, z: 2.4}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -649,8 +649,9 @@ MonoBehaviour:
   monsterSpawnPoints:
   - {fileID: 1889169631}
   - {fileID: 1561748601}
-  - {fileID: 2261655}
   monsterSpawnOffset: {x: 3, y: 0, z: 0}
+  bossMonsterPoint: {fileID: 2261655}
+  monsterGrades: 
 --- !u!4 &248525503
 Transform:
   m_ObjectHideFlags: 0

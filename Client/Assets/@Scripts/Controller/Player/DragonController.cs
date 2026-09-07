@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 /// <summary>
 /// 유저 캐릭터를 따라다니는 드래곤 동료의 이동/애니메이션을 담당한다.
@@ -75,7 +75,20 @@ private const string AttackLayerName = "Attack Layer";
     private const string MeteorStrikeEffectKey = "MeteoStrike";
     private const int RangedSkillPrewarmCount = 2;
 
+    [Header("Skill Hit Detection")]
+    [Tooltip("Q(파이어볼)/R(메테오 스트라이크) 적중 판정 반경. PlayerController.hitDetectionRadius와 동일한 방식(OverlapSphere)을 쓴다.")]
+    [SerializeField] private float skillHitRadius = 1.5f;
+    [Tooltip("데미지 판정에 포함할 레이어. 기본은 전체 레이어이며, 몬스터 전용 레이어가 생기면 그 레이어만 선택하는 것을 권장한다.")]
+    [SerializeField] private LayerMask skillHitTargetMask = ~0;
+
     private DragonSkillSlot pendingSkillSlot;
+    private static readonly Collider[] SkillHitBuffer = new Collider[8];
+
+    /// <summary>
+    /// PlaySkillAnimation이 받은 skillDamage를 CombatCalculator로 방어력 적용 전(raw) 값으로 미리 계산해둔 값.
+    /// 드래곤은 CombatStatComponent(자체 공격력)가 없으므로 attackPower=0으로 계산한다.
+    /// </summary>
+    private int pendingRawDamage;
 
     private Animator animator;
     private Transform followTarget;
@@ -128,7 +141,7 @@ private void Update()
     /// 이미 다른 스킬이 재생 중이면 무시한다. GameSceneController가
     /// UI_GameSceneView.TryStartDragonSkillCooldown이 성공했을 때만 호출한다.
     /// </summary>
-public void PlaySkillAnimation(DragonSkillSlot slot)
+public void PlaySkillAnimation(DragonSkillSlot slot, int skillDamage)
     {
         if (animator == null || isSkillPlaying)
         {
@@ -140,6 +153,8 @@ public void PlaySkillAnimation(DragonSkillSlot slot)
         {
             return;
         }
+
+        pendingRawDamage = CombatCalculator.CalculateAttackDamage(0, skillDamage);
 
         isSkillPlaying = true;
         animator.SetInteger(SkillIndexHash, index + 1);
@@ -210,7 +225,7 @@ public void PlaySkillAnimation(DragonSkillSlot slot)
     /// Q(파이어볼): 캐릭터 앞쪽(fireballMuzzleLocalOffset)에서 현재 바라보는 방향으로
     /// 투사체를 발사한다. 실제 이동/사거리 도달 판정은 DragonProjectile이 자체적으로 처리한다.
     /// </summary>
-    private void SpawnFireball()
+private void SpawnFireball()
     {
         if (ObjectPoolController.Instance == null)
         {
@@ -229,11 +244,11 @@ public void PlaySkillAnimation(DragonSkillSlot slot)
         DragonProjectile projectile = projectileObject.GetComponent<DragonProjectile>();
         if (projectile == null)
         {
-            DebugLogController.GenerateErrorMessage<DragonController>($"'{FireballEffectKey}' 프리팝에 DragonProjectile 컴포넌트가 없습니다.");
+            DebugLogController.GenerateErrorMessage<DragonController>($"'{FireballEffectKey}' 프리합에 DragonProjectile 컴포넌트가 없습니다.");
             return;
         }
 
-        projectile.Launch(GetFacingDirection(), fireballSpeed, fireballRange, string.Empty);
+        projectile.Launch(GetFacingDirection(), fireballSpeed, fireballRange, string.Empty, pendingRawDamage, skillHitRadius, skillHitTargetMask, transform);
     }
 
     /// <summary>
@@ -252,6 +267,42 @@ private void SpawnMeteorStrike()
         targetPosition.y += meteorStrikeHeightOffset;
 
         ObjectPoolController.Instance.Get(MeteorStrikeEffectKey, targetPosition, Quaternion.identity);
+
+        DealAreaDamage(targetPosition);
+    }
+
+    /// <summary>
+    /// R(메테오 스트라이크) 전용: 날아가는 투사체 없이 목표 지점에 즉시 범위 데미지를 적용한다.
+    /// 애니메이션/낙하 연출과 별도로, MonsterController.DealDamage와 같은 방식(즉시 판정)을 따른다.
+    /// </summary>
+private void DealAreaDamage(Vector3 position)
+    {
+        int hitCount = Physics.OverlapSphereNonAlloc(position, skillHitRadius, SkillHitBuffer, skillHitTargetMask, QueryTriggerInteraction.Collide);
+        if (hitCount == 0)
+        {
+            return;
+        }
+
+        DamageInfo damageInfo = new DamageInfo(pendingRawDamage, gameObject);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = SkillHitBuffer[i];
+            if (hitCollider.transform.root == transform.root)
+            {
+                continue;
+            }
+
+            // 드래곤 스킬은 동료(플레이어)에게는 데미지가 들어가서는 안 되므로, MonsterModel이 있는
+            // 대상(몇스터)에게만 적용되는 화이트리스트로 제한한다.
+            if (hitCollider.GetComponentInParent<MonsterModel>() == null)
+            {
+                continue;
+            }
+
+            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
+            damageable?.TakeDamage(damageInfo);
+        }
     }
 
     /// <summary>Q/R 원거리 스킬이 사용하는 이펙트 풀을 Awake에서 미리 프리로드한다.</summary>

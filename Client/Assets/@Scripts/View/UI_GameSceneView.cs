@@ -1,4 +1,4 @@
-﻿using TMPro;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
@@ -31,6 +31,17 @@ public class UI_GameSceneView : MonoBehaviour
     [SerializeField] private Image skillSlotW;
     [SerializeField] private Image skillSlotE;
     [SerializeField] private Image skillSlotR;
+
+    [Header("Monster Info Container")]
+    [SerializeField] private GameObject monsterContainerRoots;
+    [SerializeField] private TextMeshProUGUI monsterNameLabel;
+    [SerializeField] private Slider monsterHpBar;
+    [SerializeField] private TextMeshProUGUI hpBarLabel;
+
+    // 현재 패널에 표시 중인 몬스터. 여러 몬스터가 동시에 감지되어도 가장 최근에 표시된 1마리만 보여주며,
+    // 이 몬스터의 OnTargetLost가 아닌 다른 몬스터의 OnTargetLost는 무시한다(HideMonsterInfo의 model 비교).
+    private MonsterModel boundMonsterModel;
+
 
     [System.Serializable]
     private struct SkillCooldownVisual
@@ -128,6 +139,7 @@ private void Update()
         UpdateExpDisplay();
         UpdatePlayerSkillCooldowns();
         UpdateDragonSkillCooldowns();
+        UpdateMonsterInfoDisplay();
     }
 
 private void OnDestroy()
@@ -163,6 +175,12 @@ public void Bind(UserSaveData userData, PlayerCharacterModel model)
         lastDisplayedCurrentHp = -1;
         lastDisplayedMaxHp = -1;
         lastDisplayedExp = -1;
+
+        boundMonsterModel = null;
+        if (monsterContainerRoots != null)
+        {
+            monsterContainerRoots.SetActive(false);
+        }
 
         UpdateHpDisplay();
         UpdateExpDisplay();
@@ -262,6 +280,90 @@ public void Bind(UserSaveData userData, PlayerCharacterModel model)
         }
     }
     #endregion
+
+    /// <summary>
+    /// 플레이어가 몬스터를 발견했을 때(MonsterController.OnTargetDetected) 호출된다. monsterContainerRoots를
+    /// 활성화하고 이름/등급을 1회 표시한 뒤, 체력은 UpdateMonsterInfoDisplay가 매프레임 boundMonsterModel을 참조해 갱신한다.
+    /// 이미 다른 몬스터가 표시 중이라도 가장 최근에 발견된 몬스터로 덮어쓴다(단일 패널).
+    /// </summary>
+public void ShowMonsterInfo(string monsterName, MonsterGrade grade, MonsterModel monsterModel)
+    {
+        if (monsterModel == null)
+        {
+            return;
+        }
+
+        boundMonsterModel = monsterModel;
+
+        if (monsterContainerRoots != null)
+        {
+            monsterContainerRoots.SetActive(true);
+        }
+
+        if (monsterNameLabel != null)
+        {
+            monsterNameLabel.text = $"{monsterName} ({grade})";
+        }
+
+        if (monsterHpBar != null)
+        {
+            monsterHpBar.minValue = 0f;
+            monsterHpBar.maxValue = monsterModel.MaxHp;
+            monsterHpBar.value = monsterModel.CurrentHp;
+        }
+
+        if (hpBarLabel != null)
+        {
+            hpBarLabel.text = $"{monsterModel.CurrentHp} / {monsterModel.MaxHp}";
+        }
+    }
+
+    /// <summary>
+    /// 플레이어가 몬스터를 놓친 때(MonsterController.OnTargetLost) 호출된다. 현재 표시 중인 몬스터(boundMonsterModel)와
+    /// 일치할 때만 패널을 숨기고, 이미 다른 몬스터로 교체된 뒤에 도착한 이전 몬스터의 Lost 이벤트는 무시한다.
+    /// </summary>
+    public void HideMonsterInfo(MonsterModel monsterModel)
+    {
+        if (boundMonsterModel != monsterModel)
+        {
+            return;
+        }
+
+        boundMonsterModel = null;
+
+        if (monsterContainerRoots != null)
+        {
+            monsterContainerRoots.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// boundMonsterModel이 살아있는 동안 체력바를 매프레임 갱신한다. 몬스터가 사망(Destroy)해 boundMonsterModel이
+    /// Unity 널이 되면 패널을 자동으로 숨긴다(OnTargetLost가 따로 발화되지 않는 사망 케이스도 커버한다).
+    /// </summary>
+private void UpdateMonsterInfoDisplay()
+    {
+        if (boundMonsterModel == null)
+        {
+            if (monsterContainerRoots != null && monsterContainerRoots.activeSelf)
+            {
+                monsterContainerRoots.SetActive(false);
+            }
+            return;
+        }
+
+        if (monsterHpBar != null)
+        {
+            monsterHpBar.minValue = 0f;
+            monsterHpBar.maxValue = boundMonsterModel.MaxHp;
+            monsterHpBar.value = boundMonsterModel.CurrentHp;
+        }
+
+        if (hpBarLabel != null)
+        {
+            hpBarLabel.text = $"{boundMonsterModel.CurrentHp} / {boundMonsterModel.MaxHp}";
+        }
+    }
 /// <summary>
     /// 플레이어 스킬 슬롯(A/S/D/F)의 쿸타임을 시작한다. 이미 쿸타임 중이면 무시하고 false를 반환하므로,
     /// 스킬 발동 로직(예: PlayerController/향후 SkillController)이 이 반환값으로 실제 발동 성공 여부를 판단할 수 있다.

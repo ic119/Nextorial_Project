@@ -19,6 +19,9 @@ public class GameSceneController : MonoBehaviour
     [Tooltip("몬스터를 스폰할 위치들. 비어있으면 characterSpawnPoint/defaultSpawnPosition 기준 monsterSpawnOffset 위치에 1마리만 스폰한다.")]
     [SerializeField] private Transform[] monsterSpawnPoints;
     [SerializeField] private Vector3 monsterSpawnOffset = new Vector3(3f, 0f, 0f);
+    [SerializeField] private Transform bossMonsterPoint;
+    [Tooltip("monsterSpawnPoints와 같은 인덱스로 매칭되는 몬스터 등급. 인덱스가 모자라면 나머지는 Normal로 스폰한다.")]
+    [SerializeField] private MonsterGrade[] monsterGrades;
 
     /// <summary>
     /// 유저 캐릭터와 드래곤이 GameScene에 스폰될 때 공통으로 바라볼 초기 방향(Vector3.right).
@@ -55,11 +58,12 @@ private SkillDataModelSO skillDataModel;
     #endregion
 
     #region LifeCycle
-    private void Start()
+private void Start()
     {
         SpawnPlayerCharacter();
         SpawnPlayerDragon();
         SpawnMonsters();
+        SpawnBossMonster();
         LoadGameSceneUI();
         LoadSkillData();
         LoadDragonSkillData();
@@ -252,21 +256,24 @@ private void SpawnMonsters()
         string key = AddressableKey.NormalMonster.ToString();
         Vector3[] spawnPositions = GetMonsterSpawnPositions();
 
-        foreach (Vector3 spawnPosition in spawnPositions)
+        for (int i = 0; i < spawnPositions.Length; i++)
         {
+            Vector3 spawnPosition = spawnPositions[i];
+            MonsterGrade grade = GetMonsterGrade(i);
+
             AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(key, prefab =>
             {
                 if (prefab == null)
                 {
-                    DebugLogController.GenerateErrorMessage<GameSceneController>($"몬스터 프리합 로드 실패 Key : {key}");
+                    DebugLogController.GenerateErrorMessage<GameSceneController>($"몬스터 프리팹 로드 실패 Key : {key}");
                     return;
                 }
 
                 GameObject monster = AddressableAssetController.Instance.InstantiatePrefab(prefab);
                 monster.name = "NormalMonster";
 
-                // NormalMonster 프리합에는 Rigidbody가 이미 붙어있어 MonsterController.Awake()가 Instantiate 직후에
-                // rb.interpolation을 Interpolate로 설정해버린다. 그 상태에서 transform.position만 옥기면
+                // NormalMonster 프리팹에는 Rigidbody가 이미 붙어있어 MonsterController.Awake()가 Instantiate 직후에
+                // rb.interpolation을 Interpolate로 설정해버린다. 그 상태에서 transform.position만 옮기면
                 // 물리 엔진이 다음 프레임에 보간 이전(스폰 직전) 위치로 Transform을 되돌려버리는 버그가 있었다.
                 // Rigidbody.position/rotation을 먼저 직접 설정해 물리 엔진 측 기준점부터 올바르게 맞춰야 텔레포트가 유지된다.
                 Rigidbody monsterRigidbody = monster.GetComponent<Rigidbody>();
@@ -278,11 +285,15 @@ private void SpawnMonsters()
 
                 monster.transform.SetPositionAndRotation(spawnPosition, InitialFacingRotation);
 
+                MonsterModel monsterModel = monster.GetComponent<MonsterModel>();
+                monsterModel?.SetGrade(grade);
+
                 MonsterController monsterController = monster.GetComponent<MonsterController>();
                 if (monsterController != null)
                 {
                     spawnedMonsterControllers.Add(monsterController);
                     TryWireMonsterTargets();
+                    WireMonsterDetectionUI(monster, monsterController, monsterModel);
                 }
 
                 var animator = monster.GetComponent<Animator>();
@@ -292,12 +303,12 @@ private void SpawnMonsters()
                 }
 
                 var skinnedRenderers = monster.GetComponentsInChildren<SkinnedMeshRenderer>(true);
-                for (int i = 0; i < skinnedRenderers.Length; i++)
+                for (int r = 0; r < skinnedRenderers.Length; r++)
                 {
-                    skinnedRenderers[i].updateWhenOffscreen = true;
+                    skinnedRenderers[r].updateWhenOffscreen = true;
                 }
 
-                DebugLogController.GenerateLogMessage<GameSceneController>($"몬스터 스폰 완료: {monster.name} at {spawnPosition}");
+                DebugLogController.GenerateLogMessage<GameSceneController>($"몬스터 스폰 완료: {monster.name} ({grade}) at {spawnPosition}");
             });
         }
     }
@@ -306,7 +317,79 @@ private void SpawnMonsters()
     /// monsterSpawnPoints가 비어있으면 characterSpawnPoint/defaultSpawnPosition에 monsterSpawnOffset만큼 띄운 위치 1개만 반환하고,
     /// 지정되어 있으면 각 Transform의 위치를 그대로 반환한다.
     /// </summary>
-    private Vector3[] GetMonsterSpawnPositions()
+    
+/// <summary>
+    /// bossMonsterPoint가 지정되어 있으면 그 위치에 BossMonster를 1리만 스폰한다. 지정되어 있지 않으면 스폰하지 않는다.
+    /// 스폰 절차(Rigidbody 텔레포트, 타겟 연결, 애니메이터/렌더러 설정)는 SpawnMonsters()의 일반 몬스터와 동일하며,
+    /// BossMonster 프리팹의 MonsterModel 기본 등급이 이미 Boss이지만 명시적으로 SetGrade(Boss)를 호출해 보장한다.
+    /// </summary>
+    private void SpawnBossMonster()
+    {
+        if (bossMonsterPoint == null)
+        {
+            return;
+        }
+
+        if (AddressableAssetController.Instance == null)
+        {
+            DebugLogController.GenerateErrorMessage<GameSceneController>("AddressableAssetController.Instance가 없어 보스 몬스터를 스폰할 수 없습니다.");
+            return;
+        }
+
+        string key = AddressableKey.BossMonster.ToString();
+        Vector3 spawnPosition = bossMonsterPoint.position;
+
+        AddressableAssetController.Instance.LoadPrefabAddress<GameObject>(key, prefab =>
+        {
+            if (prefab == null)
+            {
+                DebugLogController.GenerateErrorMessage<GameSceneController>($"보스 몬스터 프리팹 로드 실패 Key : {key}");
+                return;
+            }
+
+            GameObject monster = AddressableAssetController.Instance.InstantiatePrefab(prefab);
+            monster.name = "BossMonster";
+
+            // NormalMonster와 동일하게, Rigidbody.interpolation이 Awake에서 먼저 설정되므로
+            // Rigidbody.position/rotation을 먼저 직접 맞춰야 텔레포트가 유지된다.
+            Rigidbody monsterRigidbody = monster.GetComponent<Rigidbody>();
+            if (monsterRigidbody != null)
+            {
+                monsterRigidbody.position = spawnPosition;
+                monsterRigidbody.rotation = InitialFacingRotation;
+            }
+
+            monster.transform.SetPositionAndRotation(spawnPosition, InitialFacingRotation);
+
+            MonsterModel monsterModel = monster.GetComponent<MonsterModel>();
+            monsterModel?.SetGrade(MonsterGrade.Boss);
+
+            MonsterController monsterController = monster.GetComponent<MonsterController>();
+            if (monsterController != null)
+            {
+                spawnedMonsterControllers.Add(monsterController);
+                TryWireMonsterTargets();
+                WireMonsterDetectionUI(monster, monsterController, monsterModel);
+            }
+
+            var animator = monster.GetComponent<Animator>();
+            if (animator != null)
+            {
+                animator.applyRootMotion = false;
+            }
+
+            var skinnedRenderers = monster.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            for (int i = 0; i < skinnedRenderers.Length; i++)
+            {
+                skinnedRenderers[i].updateWhenOffscreen = true;
+            }
+
+            DebugLogController.GenerateLogMessage<GameSceneController>($"보스 몬스터 스폰 완료: {monster.name} at {spawnPosition}");
+        });
+    }
+
+    
+private Vector3[] GetMonsterSpawnPositions()
     {
         if (monsterSpawnPoints != null && monsterSpawnPoints.Length > 0)
         {
@@ -321,6 +404,21 @@ private void SpawnMonsters()
         Vector3 basePosition = characterSpawnPoint != null ? characterSpawnPoint.position : defaultSpawnPosition;
         return new[] { basePosition + monsterSpawnOffset };
     }
+
+    /// <summary>
+    /// monsterGrades를 monsterSpawnPoints와 같은 인덱스로 매칭해 반환한다. 배열이 비어있거나 해당 인덱스가 범위를
+    /// 벗어나면 MonsterGrade.Normal을 기본값으로 사용한다.
+    /// </summary>
+    private MonsterGrade GetMonsterGrade(int index)
+    {
+        if (monsterGrades == null || index < 0 || index >= monsterGrades.Length)
+        {
+            return MonsterGrade.Normal;
+        }
+
+        return monsterGrades[index];
+    }
+
 
 
     /// <summary>
@@ -480,6 +578,25 @@ gameSceneView = view;
         }
     }
 
+    /// <summary>
+    /// 몬스터의 플레이어 발견/이탈 이벤트를 UI_GameSceneView의 몬스터 정보 패널과 연결한다. SpawnMonsters/SpawnBossMonster
+    /// 양쪽에서 공통으로 사용하며, gameSceneView는 필드를 직접 캡처하지 않고 호출 시점의 값을 참조하므로,
+    /// UI 로드가 몬스터 감지보다 느게 끝나도 안전하다.
+    /// </summary>
+    private void WireMonsterDetectionUI(GameObject monster, MonsterController monsterController, MonsterModel monsterModel)
+    {
+        if (monsterController == null || monsterModel == null)
+        {
+            return;
+        }
+
+        string monsterName = monster.name;
+
+        monsterController.OnTargetDetected += () => gameSceneView?.ShowMonsterInfo(monsterName, monsterModel.Grade, monsterModel);
+        monsterController.OnTargetLost += () => gameSceneView?.HideMonsterInfo(monsterModel);
+    }
+
+
 
     /// <summary>
     /// MapTile(BoxCollider) 지형과 충돌할 수 있도록 Rigidbody/CapsuleCollider를 부착한다.
@@ -555,7 +672,7 @@ gameSceneView = view;
             return;
         }
 
-        spawnedDragonController?.PlaySkillAnimation(slot);
+        spawnedDragonController?.PlaySkillAnimation(slot, skill.damage);
 
         DebugLogController.GenerateLogMessage<GameSceneController>(
             $"드래곤 스킬 사용: {skill.skillName} (슬롯:{slot}, 데미지:{skill.damage}, 쿨타임:{skill.cooldown}초)");

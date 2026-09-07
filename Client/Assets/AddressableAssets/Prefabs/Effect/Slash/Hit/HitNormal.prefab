@@ -9743,7 +9743,7 @@ GameObject:
   - component: {fileID: 1231958479351984852}
   - component: {fileID: 5181833729697563092}
   m_Layer: 0
-  m_Name: Hit_magic
+  m_Name: HitNormal
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

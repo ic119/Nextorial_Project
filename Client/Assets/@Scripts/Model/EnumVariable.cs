@@ -1,4 +1,4 @@
-public enum AddressableKey
+﻿public enum AddressableKey
 {
     None,
     UI_ProgressBar,
@@ -7,6 +7,7 @@ public enum AddressableKey
     BasicCharacter,
     BasicDragon,
     NormalMonster,
+    BossMonster,
     Tile001,
     Tile002,
     TileFloor,
@@ -15,7 +16,9 @@ public enum AddressableKey
     SlashNormal,
     WheelWindNormal,
     SkillDataModelSO,
-    DragonSkillDataModelSO
+    DragonSkillDataModelSO,
+    HitNormal,
+    HitFire
 }
 
 /// <summary>
@@ -71,4 +74,10 @@ public enum WeaponType
     Shield,
     Wand,
     Spear
+}
+
+public enum MonsterGrade
+{
+    Normal,
+    Boss
 }

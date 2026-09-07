@@ -8,6 +8,8 @@ using UnityEngine;
 [RequireComponent(typeof(ParticleSystem))]
 public class DragonProjectile : MonoBehaviour, IPoolable
 {
+    private static readonly Collider[] HitBuffer = new Collider[8];
+
     private ParticleSystem rootParticle;
 
     private Vector3 startPosition;
@@ -17,12 +19,17 @@ public class DragonProjectile : MonoBehaviour, IPoolable
     private string impactEffectKey;
     private bool isLaunched;
 
+    private int damage;
+    private float hitRadius;
+    private LayerMask hitTargetMask;
+    private Transform ownerRoot;
+
     private void Awake()
     {
         rootParticle = GetComponent<ParticleSystem>();
     }
 
-    private void Update()
+private void Update()
     {
         if (!isLaunched)
         {
@@ -30,6 +37,12 @@ public class DragonProjectile : MonoBehaviour, IPoolable
         }
 
         transform.position += moveDirection * (moveSpeed * Time.deltaTime);
+
+        if (TryDealDamage())
+        {
+            Impact();
+            return;
+        }
 
         if (Vector3.Distance(startPosition, transform.position) >= maxDistance)
         {
@@ -56,13 +69,17 @@ public class DragonProjectile : MonoBehaviour, IPoolable
     /// 소환 직후(ObjectPoolController.Get 호출 바로 뒤) 호출해 진행 방향/속도/사거리와
     /// 사거리 도달 시 남길 임팩트 이펙트의 Addressable 키를 설정하고 비행을 시작시킨다.
     /// </summary>
-    public void Launch(Vector3 direction, float speed, float distance, string onImpactEffectKey)
+public void Launch(Vector3 direction, float speed, float distance, string onImpactEffectKey, int damage, float hitRadius, LayerMask hitTargetMask, Transform ownerRoot)
     {
         startPosition = transform.position;
         moveDirection = direction.sqrMagnitude > 0f ? direction.normalized : Vector3.forward;
         moveSpeed = speed;
         maxDistance = distance;
         impactEffectKey = onImpactEffectKey;
+        this.damage = damage;
+        this.hitRadius = hitRadius;
+        this.hitTargetMask = hitTargetMask;
+        this.ownerRoot = ownerRoot;
         isLaunched = true;
     }
 
@@ -77,5 +94,49 @@ public class DragonProjectile : MonoBehaviour, IPoolable
         }
 
         ObjectPoolController.Instance?.Release(gameObject);
+    }
+
+
+/// <summary>
+    /// 현재 위치에서 hitRadius 안의 IDamageable을 찾아 데미지를 입힌다. ownerRoot(발사자, 드래곤 자신)는 제외한다.
+    /// 하나라도 명중하면 true를 반환해(투사체는 관통하지 않고) 즉시 소멸하도록 한다.
+    /// </summary>
+private bool TryDealDamage()
+    {
+        int hitCount = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, HitBuffer, hitTargetMask, QueryTriggerInteraction.Collide);
+        if (hitCount == 0)
+        {
+            return false;
+        }
+
+        bool hitAny = false;
+        DamageInfo damageInfo = new DamageInfo(damage, ownerRoot != null ? ownerRoot.gameObject : gameObject);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = HitBuffer[i];
+            if (ownerRoot != null && hitCollider.transform.root == ownerRoot)
+            {
+                continue;
+            }
+
+            // 드래곤 스킬은 동료(플레이어)에게는 데미지가 들어가서는 안 되므로, MonsterModel이 있는
+            // 대상(몇스터)에게만 적용되는 화이트리스트로 제한한다.
+            if (hitCollider.GetComponentInParent<MonsterModel>() == null)
+            {
+                continue;
+            }
+
+            IDamageable damageable = hitCollider.GetComponentInParent<IDamageable>();
+            if (damageable == null)
+            {
+                continue;
+            }
+
+            damageable.TakeDamage(damageInfo);
+            hitAny = true;
+        }
+
+        return hitAny;
     }
 }

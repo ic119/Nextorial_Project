@@ -13,6 +13,9 @@ public class HealthComponent : MonoBehaviour, IDamageable
     public event Action<int, int> OnHealthChanged;
     public event Action OnDied;
 
+    /// <summary>사망 여부와 무관하게 TakeDamage로 공격을 받을 때마다 발화된다(피격 연출 트리거용). ApplyHealth로인 초기화/회복에서는 발화되지 않는다.</summary>
+    public event Action OnDamaged;
+
     private int maxHp;
     private int currentHp;
     private CombatStatComponent combatStat;
@@ -43,7 +46,7 @@ public class HealthComponent : MonoBehaviour, IDamageable
     /// IDamageable 구현. damageInfo.Amount(방어력 적용 전 원본 데미지)에 자신의 defense를 적용해
     /// 최종 데미지만큼 체력을 깎는다. 이미 사망한 상태면 무시한다.
     /// </summary>
-    public void TakeDamage(DamageInfo damageInfo)
+public void TakeDamage(DamageInfo damageInfo)
     {
         if (IsDead)
         {
@@ -55,6 +58,7 @@ public class HealthComponent : MonoBehaviour, IDamageable
 
         currentHp = Mathf.Clamp(currentHp - finalDamage, 0, maxHp);
         OnHealthChanged?.Invoke(currentHp, maxHp);
+        OnDamaged?.Invoke();
 
         if (currentHp <= 0)
         {

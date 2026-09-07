@@ -6030,7 +6030,7 @@ Animator:
   m_GameObject: {fileID: 1803287197415319432}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: 0308cf4e83cf517488b60af58b290fe0, type: 3}
-  m_Controller: {fileID: 9100000, guid: 1505e48a34be92848b7248b1b452454c, type: 2}
+  m_Controller: {fileID: 9100000, guid: dfa6cdd3aa9f5d44a8c14ad4203cbbbe, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
   m_ApplyRootMotion: 1
@@ -6069,6 +6069,7 @@ MonoBehaviour:
   baseStat:
     attackPower: 5
     defense: 0
+  grade: 0
 --- !u!114 &2699961725115265789
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6082,6 +6083,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MonsterModel
   maxHp: 50
+  grade: 0
 --- !u!136 &844939959163745714
 CapsuleCollider:
   m_ObjectHideFlags: 0
