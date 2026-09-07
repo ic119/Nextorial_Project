@@ -50,6 +50,8 @@ public class PlayerController : MonoBehaviour
     /// </summary>
     private const string SlashFireForceEffectKey = "SlashFireForce";
     private const float FireForceBuffDuration = 8f;
+    [Tooltip("D(속성부여) 사용 중(FireForceBuffDuration 동안) 추가로 붙는 공격력 보너스.")]
+    [SerializeField] private int fireForceAttackPowerBonus = 3;
 
     /// <summary>
     /// F(회전베기) 스킬 사용 시 사용하는 이펙트 Addressable 키.
@@ -1071,9 +1073,10 @@ private void PlaySkillSlashEffect()
     /// FireForceBuffDuration(8초) 후 자동으로 원래(SlashEffectKey)로 되돌린다. 재사용 시 기존
     /// 타이머를 취소하고 새로 8초를 재장한다(중첩되지 않고 갱신된다).
     /// </summary>
-    private void ActivateFireForceBuff()
+private void ActivateFireForceBuff()
     {
         currentComboEffectKey = SlashFireForceEffectKey;
+        combatStat?.SetBonusAttackPower(fireForceAttackPowerBonus);
 
         if (attributeAssignmentEffectInstance != null)
         {
@@ -1081,7 +1084,7 @@ private void PlaySkillSlashEffect()
 
             // 자식 파티클이 전부 Play On Awake라 SetActive(true)만으로도 재생되지만,
             // 잔여 파티클(예: 로드 직후 Instantiate가 즉시 트리거한 재생의 잔상)이 남아있으면
-            // 새 재생과 겹쳐 이펙트가 두 번 나오는 것처럼 보인다. Clear 후 새로 재생해 한 번만 보이게 한다.
+            // 새 재생과 격쳤 이펙트가 두 번 나오는 것처럼 보인다. Clear 후 새로 재생해 한 번만 보이게 한다.
             attributeAssignmentRootParticle?.Clear(true);
             attributeAssignmentRootParticle?.Play(true);
         }
@@ -1091,13 +1094,14 @@ private void PlaySkillSlashEffect()
     }
 
     /// <summary>FireForce 버프가 끝나면 기본 공격 이펙트를 원래(SlashEffectKey)로 되돌립다.</summary>
-    private void DeactivateFireForceBuff()
+private void DeactivateFireForceBuff()
     {
         currentComboEffectKey = SlashEffectKey;
+        combatStat?.SetBonusAttackPower(0);
 
         if (attributeAssignmentEffectInstance != null)
         {
-            // 다음 ActivateFireForceBuff 때 잔여 파티클이 남지 않도록 완전히 멈추고 비운 뒤 끈다.
+            // 다음 ActivateFireForceBuff 때 잔여 파티클이 남지 않도록 완전히 멈추고 비운 뒤 끓다.
             attributeAssignmentRootParticle?.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             attributeAssignmentEffectInstance.SetActive(false);
         }

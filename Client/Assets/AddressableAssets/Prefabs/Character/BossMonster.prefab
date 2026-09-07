@@ -18432,7 +18432,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatStatComponent
   baseStat:
-    attackPower: 5
+    attackPower: 8
     defense: 0
   grade: 0
 --- !u!114 &8141148765371410445
@@ -18447,7 +18447,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 84f2387a71ef8ea45b5e74ec955e3aa1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MonsterModel
-  maxHp: 50
+  maxHp: 70
   grade: 1
 --- !u!136 &7823656974633876320
 CapsuleCollider:
@@ -18522,6 +18522,7 @@ MonoBehaviour:
     m_Bits: 4294967295
   rightFacingYRotation: 90
   leftFacingYRotation: -90
+  hitEffectLocalOffset: {x: 0, y: 1, z: 0}
 --- !u!1 &7259701292078839783
 GameObject:
   m_ObjectHideFlags: 0

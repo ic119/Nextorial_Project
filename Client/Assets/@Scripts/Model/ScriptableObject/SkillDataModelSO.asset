@@ -22,7 +22,7 @@ MonoBehaviour:
     skillIcon: {fileID: 21300000, guid: 4a166793240937744aeb2263bf5a3bf1, type: 3}
     skillName: "\uC0BC\uB2E8\uBCA0\uAE30"
     cooldown: 5
-    damage: 20
+    damage: 6
   - slot: 2
     skillIcon: {fileID: 21300000, guid: 309b87d4c7ebd1b4695434ca00469b52, type: 3}
     skillName: "\uC18D\uC131\uBD80\uC5EC"
