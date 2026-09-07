@@ -5974,6 +5974,7 @@ GameObject:
   - component: {fileID: 844939959163745714}
   - component: {fileID: 3597622087665893346}
   - component: {fileID: 8054403573461375893}
+  - component: {fileID: 7854980884340265814}
   m_Layer: 0
   m_Name: NormalMonster
   m_TagString: Untagged
@@ -6157,7 +6158,23 @@ MonoBehaviour:
     m_Bits: 4294967295
   rightFacingYRotation: 90
   leftFacingYRotation: -90
+--- !u!114 &7854980884340265814
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1803287197415319432}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e26a58eac5835647acf69cdd6e75ae8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitReactionComponent
+  hitClipNames:
+  - GetHit01_Spear
+  - GetHit02_Spear
   hitEffectLocalOffset: {x: 0, y: 1, z: 0}
+  attackLayerName: Attack Layer
 --- !u!1 &1824238025086582007
 GameObject:
   m_ObjectHideFlags: 0

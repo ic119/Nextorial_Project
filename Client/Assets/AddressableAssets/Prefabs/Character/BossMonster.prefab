@@ -18339,6 +18339,7 @@ GameObject:
   - component: {fileID: 7823656974633876320}
   - component: {fileID: 576718628621711684}
   - component: {fileID: 8577791725958201754}
+  - component: {fileID: 129049947543319606}
   m_Layer: 0
   m_Name: BossMonster
   m_TagString: Untagged
@@ -18522,7 +18523,23 @@ MonoBehaviour:
     m_Bits: 4294967295
   rightFacingYRotation: 90
   leftFacingYRotation: -90
+--- !u!114 &129049947543319606
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7257347084855807959}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e26a58eac5835647acf69cdd6e75ae8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HitReactionComponent
+  hitClipNames:
+  - GetHit01_Spear
+  - GetHit02_Spear
   hitEffectLocalOffset: {x: 0, y: 1, z: 0}
+  attackLayerName: Attack Layer
 --- !u!1 &7259701292078839783
 GameObject:
   m_ObjectHideFlags: 0

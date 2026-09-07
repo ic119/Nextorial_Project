@@ -145,23 +145,10 @@ public class PlayerController : MonoBehaviour
     private static readonly int ComboIndexHash = Animator.StringToHash("ComboIndex");
     private static readonly int SkillIndexHash = Animator.StringToHash("SkillIndex");
 
-    /// <summary>
-    /// 피격 시 랜덤으로 재생할 두 피격 애니메이션 클립 이름. Attack Layer 안에 같이 있는 GetHit01/GetHit02 상태와 매칭된다.
-    /// 클립을 찾지 못하면 FallbackHitReactionDuration을 그대로 쓴다.
-    /// </summary>
-    private static readonly string[] HitClipNames = { "GetHit01_SingleSword", "GetHit02_SingleSword" };
-    private const float FallbackHitReactionDuration = 0.6f;
-    private static readonly int HitIndexHash = Animator.StringToHash("HitIndex");
-    private readonly float[] hitAnimationDurations = { FallbackHitReactionDuration, FallbackHitReactionDuration };
-    private HealthComponent healthComponent;
-
-    [Header("Hit Effect Settings")]
-    [Tooltip("피격 순간 재생할 이펙트(캤릭터 기준 로컬 오프셋).")]
-    [SerializeField] private Vector3 hitEffectLocalOffset = new Vector3(0f, 1f, 0f);
-    private const string HitEffectKey = "HitNormal";
+    private HitReactionComponent hitReaction;
 
     /// <summary>이 값이 true인 동안은 피격 연출이 재생 중이라 이동/점프/콤보/스킬을 모두 막는다.</summary>
-    private bool isHitReacting;
+    private bool IsHitReacting => hitReaction != null && hitReaction.IsHitReacting;
 
     /// <summary>
     /// A/S/D/F 스킬 애니메이션이 재생 중인지 여부. 콤보 공격과 스킬은 같은 Attack Layer를 공유하므로
@@ -242,16 +229,21 @@ private void Awake()
         animator = GetComponent<Animator>();
         characterModel = GetComponent<PlayerCharacterModel>();
         combatStat = GetComponent<CombatStatComponent>();
-        healthComponent = GetComponent<HealthComponent>();
+        hitReaction = GetComponent<HitReactionComponent>();
 
         if (characterModel == null)
         {
             DebugLogController.GenerateErrorMessage<PlayerController>("PlayerCharacterModel이 없어 장착된 무기 타입을 확인할 수 없어 콤보 공격이 비활성화됩니다.");
         }
 
-        if (healthComponent != null)
+        if (hitReaction != null)
         {
-            healthComponent.OnDamaged += PlayHitReaction;
+            hitReaction.BeforeHitReaction += HandleBeforeHitReaction;
+            hitReaction.ShouldKeepAttackLayerActiveAfterReaction = () => comboStep > 0 || isSkillPlaying;
+        }
+        else
+        {
+            DebugLogController.GenerateErrorMessage<PlayerController>("HitReactionComponent가 없어 피격 리액션을 재생할 수 없습니다.");
         }
 
         if (animator == null)
@@ -263,7 +255,6 @@ private void Awake()
             ApplyJumpAnimationSpeed();
             CacheComboClipLengths();
             CacheSkillAnimationDurations();
-            CacheHitAnimationDurations();
 
             attackLayerIndex = animator.GetLayerIndex(AttackLayerName);
             if (attackLayerIndex < 0)
@@ -294,9 +285,9 @@ private void OnDestroy()
             KeyboardInputController.Instance.OnAttackPressed -= HandleAttackPressed;
         }
 
-        if (healthComponent != null)
+        if (hitReaction != null)
         {
-            healthComponent.OnDamaged -= PlayHitReaction;
+            hitReaction.BeforeHitReaction -= HandleBeforeHitReaction;
         }
     }
 
@@ -311,7 +302,7 @@ private void FixedUpdate()
 
         Vector3 velocity = rb.linearVelocity;
         // 콤보 공격/스킬/피격 연출 재생 중에는 제자리에서 동작하는 모션이므로 좌우 이동을 멈추다.
-        velocity.x = (comboStep > 0 || isSkillPlaying || isHitReacting) ? 0f : direction * moveSpeed;
+        velocity.x = (comboStep > 0 || isSkillPlaying || IsHitReacting) ? 0f : direction * moveSpeed;
 
         if (jumpRequested)
         {
@@ -319,7 +310,7 @@ private void FixedUpdate()
 
             // 콤보 공격/스킬/피격 중에는 점프를 막아 Attack 상태와 Jump 상태가 동시에 요구되는
             // 상황(애니메이터 충돌) 자체가 생기지 않도록 한다.
-            if (isGrounded && comboStep == 0 && !isSkillPlaying && !isHitReacting)
+            if (isGrounded && comboStep == 0 && !isSkillPlaying && !IsHitReacting)
             {
                 velocity.y = jumpForce;
                 isGrounded = false;
@@ -503,7 +494,7 @@ private void FixedUpdate()
         }
 
         // 피격 연출 중에는 새 공격 입력을 받지 않는다(대기 입력으로 남겨두지 않고 버린다).
-        if (isHitReacting)
+        if (IsHitReacting)
         {
             attackRequested = false;
             return;
@@ -644,94 +635,18 @@ private void FixedUpdate()
     }
 
 /// <summary>
-    /// HealthComponent.OnDamaged(데미지를 받을 때마다, 사망 여부와 무관)에 구독되어 호출된다.
-    /// 진행 중이던 콤보/스킬을 즉시 중단하고 GetHit01/GetHit02 중 하나를 랜덤으로 재생한다.
-    /// 해당 클립 길이가 지나면 자동으로 AttackLayerIdle로 되돌아간다.
+    /// HitReactionComponent가 피격 연출을 시작하기 직전에 호출된다(BeforeHitReaction 콜백).
+    /// 진행 중이던 콤보/스킬을 즉시 중단해 피격 연출이 우선되도록 한다.
     /// </summary>
-private void PlayHitReaction()
+private void HandleBeforeHitReaction()
     {
-        if (animator == null || attackLayerIndex < 0)
-        {
-            return;
-        }
-
-        isHitReacting = true;
-
         CancelInvoke(nameof(FinishSkillAnimation));
         isSkillPlaying = false;
         animator.SetInteger(SkillIndexHash, 0);
 
         comboStep = 0;
         animator.SetInteger(ComboIndexHash, 0);
-
-        int hitIndex = Random.Range(0, HitClipNames.Length);
-        animator.SetInteger(HitIndexHash, hitIndex + 1);
-        SetAttackLayerWeight(1f);
-        SpawnHitEffect();
-
-        CancelInvoke(nameof(FinishHitReaction));
-        Invoke(nameof(FinishHitReaction), hitAnimationDurations[hitIndex]);
     }
-
-private void FinishHitReaction()
-    {
-        isHitReacting = false;
-
-        if (animator == null)
-        {
-            return;
-        }
-
-        animator.SetInteger(HitIndexHash, 0);
-
-        if (comboStep == 0 && !isSkillPlaying)
-        {
-            SetAttackLayerWeight(0f);
-        }
-    }
-
-    /// <summary>
-    /// HitClipNames(GetHit01/02_SingleSword)의 실제 길이를 읽어둔다. 찾지 못하면 FallbackHitReactionDuration을 그대로 유지한다.
-    /// </summary>
-    private void CacheHitAnimationDurations()
-    {
-        if (animator.runtimeAnimatorController == null)
-        {
-            return;
-        }
-
-        foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
-        {
-            if (clip == null)
-            {
-                continue;
-            }
-
-            for (int i = 0; i < HitClipNames.Length; i++)
-            {
-                if (clip.name == HitClipNames[i])
-                {
-                    hitAnimationDurations[i] = clip.length;
-                }
-            }
-        }
-    }
-
-/// <summary>
-    /// hitEffectLocalOffset 위치에 풀링된 HitNormal 이펙트를 소환한다.
-    /// </summary>
-    private void SpawnHitEffect()
-    {
-        if (ObjectPoolController.Instance == null)
-        {
-            return;
-        }
-
-        Vector3 spawnPosition = transform.TransformPoint(hitEffectLocalOffset);
-        ObjectPoolController.Instance.Get(HitEffectKey, spawnPosition, transform.rotation);
-    }
-
-
 
 
 /// <summary>KeyboardInputController의 점프 입력 이벤트 핸들러. 다음 FixedUpdate에서 처리되도록 요청만 기록한다.</summary>
@@ -813,7 +728,7 @@ private void CacheSkillAnimationDurations()
     /// </summary>
 public void PlaySkillAnimation(UI_GameSceneView.PlayerSkillSlot slot, int skillDamage)
     {
-        if (animator == null || comboStep > 0 || isSkillPlaying || isHitReacting)
+        if (animator == null || comboStep > 0 || isSkillPlaying || IsHitReacting)
         {
             return;
         }
@@ -1032,7 +947,6 @@ private void PlaySkillSlashEffect()
     {
         ObjectPoolController.Instance?.Preload(SlashEffectKey, SlashEffectPrewarmCount);
         ObjectPoolController.Instance?.Preload(SlashFireForceEffectKey, SlashEffectPrewarmCount);
-        ObjectPoolController.Instance?.Preload(HitEffectKey, SlashEffectPrewarmCount);
 
         if (skillEffectKeysBySlot == null)
         {

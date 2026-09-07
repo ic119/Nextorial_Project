@@ -51,30 +51,16 @@ public class MonsterController : MonoBehaviour
     private static readonly int IsMoveHash = Animator.StringToHash(nameof(PlayerMoveState.IsMove));
     private static readonly int ComboIndexHash = Animator.StringToHash("ComboIndex");
 
-    /// <summary>
-    /// 피격 시 랜덤으로 재생할 두 피격 애니메이션 클립 이름. Attack Layer 안에 같이 있는 GetHit01/GetHit02 상태와 매칭된다.
-    /// 클립을 찾지 못하면 FallbackHitReactionDuration을 그대로 쓴다.
-    /// </summary>
-    private static readonly string[] HitClipNames = { "GetHit01_Spear", "GetHit02_Spear" };
-    private const float FallbackHitReactionDuration = 0.6f;
-    private static readonly int HitIndexHash = Animator.StringToHash("HitIndex");
-    private readonly float[] hitAnimationDurations = { FallbackHitReactionDuration, FallbackHitReactionDuration };
-
-    [Header("Hit Effect Settings")]
-    [Tooltip("피격 순간 재생할 이펙트(캤릭터 기준 로컬 오프셋).")]
-    [SerializeField] private Vector3 hitEffectLocalOffset = new Vector3(0f, 1f, 0f);
-    private const string HitEffectKey = "HitNormal";
-    private const int HitEffectPrewarmCount = 3;
+    private HitReactionComponent hitReaction;
 
     /// <summary>이 값이 true인 동안은 피격 연출이 재생 중이라 이동/추적/공격을 모두 멈춘다.</summary>
-    private bool isHitReacting;
+    private bool IsHitReacting => hitReaction != null && hitReaction.IsHitReacting;
 
     private static readonly Collider[] AttackHitBuffer = new Collider[8];
 
     private Rigidbody rb;
     private Animator animator;
     private CombatStatComponent combatStat;
-    private HealthComponent healthComponent;
     private Transform target;
     private float nextAttackTime;
     private bool isMoving;
@@ -109,22 +95,20 @@ private void Awake()
 
         animator = GetComponent<Animator>();
         combatStat = GetComponent<CombatStatComponent>();
-        healthComponent = GetComponent<HealthComponent>();
+        hitReaction = GetComponent<HitReactionComponent>();
 
         if (combatStat == null)
         {
             DebugLogController.GenerateErrorMessage<MonsterController>("CombatStatComponent가 없어 공격력을 계산할 수 없습니다.");
         }
 
-        if (healthComponent != null)
+        if (hitReaction != null)
         {
-            healthComponent.OnDamaged += PlayHitReaction;
+            hitReaction.BeforeHitReaction += HandleBeforeHitReaction;
         }
-
-        // 몬스터는 여러 마리가 동시에 존재하므로, 이미 풀이 있으면 중복 프리워밍하지 않도록 가드한다.
-        if (ObjectPoolController.Instance != null && !ObjectPoolController.Instance.HasPool(HitEffectKey))
+        else
         {
-            ObjectPoolController.Instance.Preload(HitEffectKey, HitEffectPrewarmCount);
+            DebugLogController.GenerateErrorMessage<MonsterController>("HitReactionComponent가 없어 피격 리액션을 재생할 수 없습니다.");
         }
 
         if (animator == null)
@@ -140,13 +124,12 @@ private void Awake()
             }
 
             CacheAttackAnimationDuration();
-            CacheHitAnimationDurations();
         }
     }
 
 private void FixedUpdate()
     {
-        if (isHitReacting)
+        if (IsHitReacting)
         {
             StopMoving();
             return;
@@ -189,9 +172,9 @@ private void FixedUpdate()
 
 private void OnDestroy()
     {
-        if (healthComponent != null)
+        if (hitReaction != null)
         {
-            healthComponent.OnDamaged -= PlayHitReaction;
+            hitReaction.BeforeHitReaction -= HandleBeforeHitReaction;
         }
     }
 
@@ -289,8 +272,6 @@ private void PlayAttackAnimation()
             return;
         }
 
-        CancelInvoke(nameof(FinishHitReaction));
-
         animator.SetInteger(ComboIndexHash, 1);
         SetAttackLayerWeight(1f);
 
@@ -310,92 +291,15 @@ private void PlayAttackAnimation()
     }
 
 /// <summary>
-    /// HealthComponent.OnDamaged(데미지를 받을 때마다, 사망 여부와 무관)에 구독되어 호출된다.
-    /// GetHit01/GetHit02 중 하나를 랜덤으로 고른 뒤 HitIndex(1 또는 2)를 세팅해 Attack Layer의
-    /// AnyState 전환으로 재생하고, 해당 클립 길이가 지나면 자동으로 AttackLayerIdle로 되돌린다.
-    /// 공격 애니메이션과 같은 Attack Layer를 공유하므로, 진행 중이던 공격 종료 타이머는 취소해
-    /// 피격 연출이 조기에 잘리지 않게 한다.
+    /// HitReactionComponent가 피격 연출을 시작하기 직전에 호출된다(BeforeHitReaction 콜백).
+    /// 공격 애니메이션과 같은 Attack Layer를 공유하므로, 진행 중이던 공격 종료 타이머와 ComboIndex를
+    /// 정리해 피격 연출이 조기에 잘리거나 겹치지 않게 한다.
     /// </summary>
-private void PlayHitReaction()
+private void HandleBeforeHitReaction()
     {
-        if (animator == null || attackLayerIndex < 0)
-        {
-            return;
-        }
-
-        isHitReacting = true;
-
         CancelInvoke(nameof(FinishAttackAnimation));
         animator.SetInteger(ComboIndexHash, 0);
-
-        int hitIndex = Random.Range(0, HitClipNames.Length);
-        int hitIndexParam = hitIndex + 1;
-
-        animator.SetInteger(HitIndexHash, hitIndexParam);
-        SetAttackLayerWeight(1f);
-        SpawnHitEffect();
-
-        CancelInvoke(nameof(FinishHitReaction));
-        Invoke(nameof(FinishHitReaction), hitAnimationDurations[hitIndex]);
     }
-
-private void FinishHitReaction()
-    {
-        isHitReacting = false;
-
-        if (animator == null)
-        {
-            return;
-        }
-
-        animator.SetInteger(HitIndexHash, 0);
-        SetAttackLayerWeight(0f);
-    }
-
-    /// <summary>
-    /// HitClipNames(GetHit01_Spear, GetHit02_Spear)의 실제 길이를 읽어둔다. 클립을 찾지 못하면
-    /// FallbackHitReactionDuration을 그대로 유지한다.
-    /// </summary>
-    private void CacheHitAnimationDurations()
-    {
-        if (animator.runtimeAnimatorController == null)
-        {
-            return;
-        }
-
-        foreach (AnimationClip clip in animator.runtimeAnimatorController.animationClips)
-        {
-            if (clip == null)
-            {
-                continue;
-            }
-
-            for (int i = 0; i < HitClipNames.Length; i++)
-            {
-                if (clip.name == HitClipNames[i])
-                {
-                    hitAnimationDurations[i] = clip.length;
-                }
-            }
-        }
-    }
-
-/// <summary>
-    /// hitEffectLocalOffset 위치에 풀링된 HitNormal 이펙트를 소환한다. 풀에 없으면(로드 직전 등) ObjectPoolController가
-    /// 자체적으로 로드만 요청하고 이번엔 조용히 건너뀉다(에러로깰지 않음).
-    /// </summary>
-    private void SpawnHitEffect()
-    {
-        if (ObjectPoolController.Instance == null)
-        {
-            return;
-        }
-
-        Vector3 spawnPosition = transform.TransformPoint(hitEffectLocalOffset);
-        ObjectPoolController.Instance.Get(HitEffectKey, spawnPosition, transform.rotation);
-    }
-
-
 
     private void SetAttackLayerWeight(float weight)
     {

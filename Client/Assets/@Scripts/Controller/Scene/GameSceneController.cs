@@ -143,6 +143,12 @@ spawnedKeyboardInput.OnSkillKeyPressed += HandleSkillKeyPressed;
             spawnedKeyboardInput.OnDragonSkillKeyPressed += HandleDragonSkillKeyPressed;
 
             SetupPhysics(spawnedCharacter);
+
+            // PlayerController.Awake()가 GetComponent<HitReactionComponent>()로 참조하므로,
+            // PlayerController보다 먼저 붙여야 한다(KeyboardInputController와 같은 이유).
+            // hitClipNames는 인스펙터로 지정할 수 없어(AddComponent 방식) 여기서 SingleSword 전용 클립으로 주입한다.
+            HitReactionComponent hitReaction = spawnedCharacter.AddComponent<HitReactionComponent>();
+            hitReaction.SetHitClipNames("GetHit01_SingleSword", "GetHit02_SingleSword");
             spawnedPlayerController = spawnedCharacter.AddComponent<PlayerController>();
 
             if (cameraZoomController != null)
