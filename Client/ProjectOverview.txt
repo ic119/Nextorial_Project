@@ -1,0 +1,258 @@
+====================================================================
+ Nextorial Project — 프로젝트 구조 및 핵심기능 정리
+ (2.5D 액션 RPG / Unity, 이 문서는 코드베이스를 기준으로 작성됨)
+====================================================================
+
+1. 프로젝트 개요
+--------------------------------------------------------------------
+- 장르: 2.5D 사이드뷰 액션 RPG (플레이어 + 드래곤 동료가 함께 몬스터와 전투)
+- 씬 구성(빌드 순서): BootstrapScene(0) -> LobbyScene(1) -> GameScene(2)
+- 리소스 로딩: Addressables 시스템 전면 사용(캐릭터/몬스터/UI/이펙트/타일 전부)
+- 오브젝트 재사용: ObjectPoolController 기반 풀링(파티클/투사체 등)
+- 세이브: JsonUtility 기반 로컬 JSON 파일 저장(Application.persistentDataPath)
+
+
+2. 코드 폴더 구조 (Assets/@Scripts, 약 48개 스크립트)
+--------------------------------------------------------------------
+- Controller/                MonoBehaviour 로직
+    Scene/                   BootstrapSceneController, LobbySceneController,
+                             GameSceneController
+    Module/                  싱글턴 모듈: AddressableAssetController,
+                             EventController, GameManager, LoadSceneController,
+                             ObjectPoolController, SaveDataController,
+                             SoundController
+    Player/                  PlayerController, KeyboardInputController,
+                             DragonController
+    Monster/                 MonsterController
+    Camera/                  CameraZoomController
+    Effect/                  DragonProjectile, PooledParticleEffect,
+                             TimedPoolRelease
+- Model/                     순수 데이터/상태 클래스
+    (root)                   EnumVariable.cs(공용 enum 모음), SaveUserDataModel.cs
+    Character/               CharacterCustomModel, MonsterModel,
+                             PlayerCharacterModel, PlayerDragonModel
+    Combat/                  CombatCalculator, CombatStat, CombatStatComponent,
+                             DamageInfo, HealthComponent
+    ScriptableObject/        SkillDataModelSO, DragonSkillDataModelSO 등
+                             데이터 SO와 그 래퍼 모델
+- View/                      UI 전용 MonoBehaviour: UI_GameSceneView,
+                             UI_LobbySceneView, UI_CharacterCreatePopup,
+                             UI_ProgressBar, CharacterPreviewStage
+- Interface/                 IDamageable, IStatBlock
+- Utils/                     SingletonObject(제네릭 싱글턴 베이스),
+                             SequenceManager/ISequenceStep, DebugLogController,
+                             ModuleDestroyController, UI_DragRotateHandler
+
+* 별도의 Map/Tile 스크립트는 없음 — 스테이지는 전부 손으로 배치한 정적 프리팹
+  (Tile001/002, TileFloor, TileRockFloor, TileStairs)이며 GroundCollider로
+  물리 충돌만 처리한다. 절차적 맵 생성 기능은 없다.
+
+
+3. 씬 흐름
+--------------------------------------------------------------------
+[BootstrapScene]
+  - SaveDataController.Load()를 즉시 호출해 세이브 유무 확인(GameManager.HasSaveData)
+  - SequenceManager(Utils, 범용 단계 실행기)에 3단계를 순서대로 등록해 실행:
+      1) LoadSceneManage      -> LoadSceneController.Init()
+      2) AddressableAssetManage -> AddressableAssetController.Init()
+      3) SoundManage          -> SoundController 초기화
+  - 진행률은 UI_ProgressBar에 표시, 완료 시 LobbyScene으로 전환
+  - SequenceManager는 Bootstrap 전용이 아니라 재사용 가능한 범용 단계 실행기로
+    설계되어 있음(단계별 타임아웃/취소/진행 콜백 지원)
+
+[LobbyScene]
+  - UI_LobbySceneView: Start/Continue(세이브 있을 때만)/Exit 버튼
+  - UI_CharacterCreatePopup: 실시간 3D 프리뷰(CharacterPreviewStage, 드래그 회전),
+    닉네임 정규식 검증(한글/영문/숫자 2~12자), 헤어/눈/입 순환+랜덤, 기본 스탯 표시
+  - 캐릭터 생성 시 SaveUserDataModel(유저+드래곤 기본값, 드래곤은 "BabyDragon"
+    레벨1 str5/mana10 고정)을 만들어 저장 후 GameScene으로 전환
+
+[GameScene] — 이번 세션에서 가장 많이 다룬 핵심 게임플레이 영역 (아래 4~9번 참고)
+
+
+4. 세이브 데이터 시스템
+--------------------------------------------------------------------
+- SaveDataController(Module, 씬 전환 시에도 유지)가 JsonUtility.ToJson/FromJson으로
+  Application.persistentDataPath/SaveUserData.json 파일에 직접 저장/로드
+  (PlayerPrefs 아님)
+- CurrentData에 로드된 값을 메모리 캐시로 들고 있음
+- UpdateCharacterCustomization(hair,eye,mouth)로 외모만 부분 갱신 가능
+
+저장 데이터 구조(SaveUserDataModel.cs):
+  SaveUserDataModel
+   ├─ UserSaveData user
+   │    ├─ userID, userLevel, userExp
+   │    ├─ UserStats(str, agi, intel)      // IStatBlock.GetTotal()
+   │    ├─ maxHp, currentHp
+   │    └─ hairIndex, eyeIndex, mouthIndex
+   └─ DragonSaveData dragon
+        ├─ dragonID, dragonLevel
+        └─ DragonStats(str, mana)          // IStatBlock.GetTotal()
+
+- 기본값: str/agi/intel = 10/10/10, maxHp = 100, level = 1, exp = 0
+- 레벨업/스탯 성장 시스템은 존재하지 않음(userLevel/userExp 필드만 있고 아직
+  아무것도 이 값을 근거로 스탯을 올려주지 않음) — 추후 핵심기능 후보
+
+
+5. 캐릭터 커스터마이징
+--------------------------------------------------------------------
+- CharacterCustomModel: 헤어/눈/입 각각을 "머티리얼 교체"가 아니라
+  "미리 만들어둔 GameObject 목록 중 하나만 SetActive(true)"하는 방식으로 구현
+- 실제 인게임 캐릭터 프리팹과 로비의 CharacterPreviewStage(미리보기 전용 3D
+  무대: 별도 카메라/조명/받침대/렌더텍스처 + 전용 컬링 레이어)가 동일 컴포넌트를
+  공유하므로 미리보기와 실제 스폰 캐릭터가 항상 동일하게 보장됨
+
+
+6. 플레이어 시스템 (PlayerController)
+--------------------------------------------------------------------
+- 이동: Rigidbody 기반 X축 이동(2.5D, Z축 고정), 좌우 입력에 따라 Y회전으로 방향 전환
+- 점프: 접지 판정(Raycast) 기반, 점프 애니메이션 재생 속도를 물리 체공시간에 맞춰
+  자동 보정(JumpSpeed 파라미터)
+- 기본 콤보 공격: 2단 콤보(Combo01/02_InPlace_SingleSword), 콤보 유예시간 존재,
+  Attack Layer(별도 애니메이터 레이어)로 재생, OverlapSphere 판정으로 데미지 적용
+- 스킬(A/S/D/F, SkillDataModelSO 데이터 기반):
+    A(찌르기)      : 데미지10, 쿨타임3초, 단일 히트
+    S(삼단베기)    : 데미지6(=밸런스 조정됨, 3연타×(공격력+6)), 쿨타임5초
+    D(속성부여)    : 데미지0, 쿨타임10초 — 8초간 이펙트를 화염형으로 바꾸고
+                     공격력을 소폭(+3, fireForceAttackPowerBonus) 증가시키는
+                     버프 스킬(이번 세션에서 실질 버프 효과를 추가함)
+    F(회전베기)    : 데미지18, 쿨타임8초
+- 피격 시스템: 데미지를 받으면(HealthComponent.OnDamaged) GetHit01/02 중 하나를
+  랜덤 재생하고, 재생 중에는 이동/점프/콤보/스킬이 전부 잠긴다(isHitReacting).
+  동시에 HitNormal 이펙트를 캐릭터 위치에 소환한다.
+- Attack Layer를 콤보/스킬/피격 연출이 공유하므로, 서로 겹칠 때 타이머를
+  상호 취소해 연출이 도중에 끊기지 않도록 처리되어 있음
+
+
+7. 드래곤 동료 시스템 (DragonController)
+--------------------------------------------------------------------
+- 비행형 동료로 간주해 Rigidbody 없이 Transform을 직접 이동(따라가기 AI:
+  일정 거리 이상 벌어지면 따라오고, 가까워지면 멈추는 히스테리시스 구조)
+- 스킬(Q/W/E/R, DragonSkillDataModelSO 데이터 기반):
+    Q(파이어볼)      : 데미지15, 쿨타임6초 — 실제 투사체(DragonProjectile)가
+                       날아가며 몬스터에게만 명중 판정(플레이어 제외 화이트리스트,
+                       MonsterModel 보유 여부로 판별)
+    W(드래곤 포스)   : 데미지15(데이터만 존재, 실제 발동 로직 미구현 — 핵심기능 공백)
+    E(드래곤 피어)   : 데미지0(데이터만 존재, 실제 발동 로직 미구현 — 핵심기능 공백)
+    R(메테오 스트라이크): 데미지10, 쿨타임5초 — 투사체 없이 목표 지점에 즉시
+                       범위 데미지(OverlapSphere), 몬스터만 대상
+- 드래곤은 CombatStatComponent가 없어 공격력이 항상 0으로 계산되며, 스킬
+  데미지 수치가 곧 최종 원본 데미지가 됨(성장/레벨 반영 없음 — 저장 데이터의
+  dragonLevel/DragonStats가 전투에 전혀 반영되지 않는 공백 존재)
+
+
+8. 몬스터 시스템 (MonsterController / MonsterModel)
+--------------------------------------------------------------------
+- 종류: NormalMonster(창 사용, NormalMonsterSpearStance 컨트롤러),
+        BossMonster(검+방패, 전용 애니메이터 컨트롤러)
+- 등급(MonsterGrade: Normal/Boss): CombatStatComponent/MonsterModel에 배율
+  적용(현재 Boss = HP/공격력/방어력 3배)
+- AI: 감지범위(5) 안에 타겟이 들어오면 추적, 공격범위(1.2) 안에서 공격 쿨타임
+  (1.5초)마다 콤보 애니메이션+즉시 데미지 판정
+- 발견/이탈 이벤트(OnTargetDetected/OnTargetLost)를 GameSceneController가
+  구독해 UI_GameSceneView의 "몬스터 정보 패널"을 실시간으로 열고 닫음
+  (이름/등급/HP바/HP텍스트를 매프레임 갱신)
+- 피격 시스템: 플레이어와 동일하게 랜덤 GetHit01/02 재생 + 이동/공격 잠금 +
+  HitNormal 이펙트, HealthComponent.OnDamaged 이벤트 기반
+- 스폰: GameSceneController가 monsterSpawnPoints(일반) / bossMonsterPoint
+  (보스 전용) 배열/필드로 위치를 지정해 Addressable로 로드 후 스폰. 스폰 직후
+  Rigidbody.position을 직접 지정해 물리 엔진과의 텔레포트 버그를 회피하는
+  처리가 되어 있음(중요한 과거 버그 픽스)
+
+
+9. 전투/데미지 계산 공통 시스템
+--------------------------------------------------------------------
+- CombatCalculator(공식의 유일한 근원):
+    원본데미지 = max(0,공격력) + max(0,스킬데미지)
+    최종데미지 = max(1, 원본데미지 - max(0,방어력))   // 최소 데미지 1 보장
+- CombatStatComponent: baseStat(공격력/방어력) + 등급 배율 + 일시적 버프
+  (bonusAttackPower, D스킬 등에서 사용)를 합산해 최종 AttackPower/Defense 제공
+- HealthComponent: IDamageable 구현, TakeDamage 시 방어력 적용 후 체력 차감,
+  OnHealthChanged/OnDamaged/OnDied 이벤트 제공(사망 처리, UI 갱신, 피격 연출
+  트리거가 전부 이 이벤트들에 물려있음)
+- 밸런스 데이터(이번 세션 중 조정됨):
+    Player   : str/agi/intel 10/10/10 -> 공격력10/방어력5, HP100
+    NormalMonster: HP70, 공격력8
+    BossMonster  : HP210, 공격력24(등급배율 3x 적용)
+
+
+10. UI 시스템 (View/)
+--------------------------------------------------------------------
+- UI_GameSceneView: 닉네임/HP바/EXP바, A/S/D/F·Q/W/E/R 스킬 아이콘+쿨타임
+  연출(DOTween 색상 트윈), 몬스터 정보 패널(발견 시에만 표시, 이름/등급/HP바/
+  HP텍스트 실시간 갱신)
+- UI_LobbySceneView / UI_CharacterCreatePopup / UI_ProgressBar: 3번 항목 참고
+
+
+11. 이펙트 & 오브젝트 풀링
+--------------------------------------------------------------------
+- ObjectPoolController(싱글턴): Addressable Key 기준으로 큐 형태 풀 관리,
+  Preload/Get/Release, IPoolable 훅(OnGetFromPool/OnReleaseToPool)
+- PooledParticleEffect / TimedPoolRelease: 일정 시간 후 자동으로 풀에 반환되는
+  단발성 파티클 이펙트 처리
+- DragonProjectile: 날아가는 투사체 전용(방향/속도/사거리/데미지/판정반경을
+  Launch()로 주입받아 스스로 이동+명중 판정 후 소멸)
+- 스킬/피격 이펙트: SlashNormal, WheelWindNormal, HitNormal, HitFire,
+  FireBall, MeteoStrike 등 Addressable로 관리
+
+
+12. Addressable 리소스 관리
+--------------------------------------------------------------------
+- AddressableAssetController(싱글턴)가 로드/핸들 관리 전담
+- AddressableKey enum 전체 목록(EnumVariable.cs):
+    UI: UI_ProgressBar, UI_LobbyScene, UI_GameScene
+    캐릭터: BasicCharacter, BasicDragon, NormalMonster, BossMonster
+    맵타일: Tile001, Tile002, TileFloor, TileRockFloor, TileStairs
+    이펙트: SlashNormal, WheelWindNormal, HitNormal, HitFire
+    데이터: SkillDataModelSO, DragonSkillDataModelSO
+
+
+13. 그 외 공통 인프라
+--------------------------------------------------------------------
+- SingletonObject(Utils): 프로젝트 전역에서 쓰는 제네릭 싱글턴 베이스 클래스
+- SequenceManager(Utils): 범용 단계 실행기(2번 항목 참고)
+- EventController: OnRequestMainCameraReset/OnRequestDetectionEvent/
+  OnRequestViewChange/OnRequestEngineStartEvent 등 4개의 전역 이벤트를 갖는
+  이벤트 버스 — 현재 스코프(2.5D 액션 RPG)와 이름이 잘 안 맞는 항목이 있어
+  과거 프로토타입의 잔재로 추정됨(정리 대상 후보)
+- GameManager: 매우 단순한 싱글턴, 현재는 HasSaveData 플래그 하나만 보유
+- KeyboardInputController: 새 Input System 기반 입력 폴링 단일 지점(이동축/점프/
+  공격/A·S·D·F/Q·W·E·R를 이벤트로 발행), InputEnabled로 팝업 중 입력 차단 가능
+- CameraZoomController: 이동 속도에 따라 Cinemachine 카메라 FOV를 SmoothDamp로
+  자동 조절
+
+
+====================================================================
+ 핵심기능(Core Feature) 후보 정리
+====================================================================
+현재 구조를 기준으로, 이 프로젝트의 "핵심기능"이라 부를 만한 것과 그 완성도를
+정리하면 다음과 같다.
+
+[이미 잘 갖춰진 핵심기능]
+ 1. Addressable + ObjectPool 기반의 확장 가능한 리소스/이펙트 파이프라인
+ 2. 몬스터 등급(Grade) 시스템 — 같은 프리팹 구조를 재사용하면서 배율만으로
+    Normal/Boss를 구분하는 확장하기 쉬운 설계
+ 3. 실시간 몬스터 발견 UI(감지 이벤트 -> 정보 패널 자동 표시/HP 실시간 갱신)
+ 4. 공용 전투 파이프라인(CombatCalculator/CombatStatComponent/HealthComponent/
+    IDamageable)을 Player·Dragon·Monster가 모두 동일하게 재사용
+ 5. 피격 시 랜덤 리액션 애니메이션 + 행동 잠금 + 이펙트가 Player/Monster에
+    동일한 패턴으로 구현되어 있어 신규 캐릭터 추가 시 그대로 재사용 가능
+ 6. 드래곤 동료의 실제 투사체/범위 스킬(파이어볼/메테오 스트라이크)이 몬스터만
+    타격하도록 예외처리된 협동 전투 구조
+ 7. 캐릭터 생성 + 실시간 3D 프리뷰 + 커스터마이징(헤어/눈/입) 파이프라인
+
+[데이터는 있지만 실제 동작이 비어있는 핵심기능 공백 — 우선 보완 후보]
+ A. 드래곤 스킬 W(드래곤 포스)/E(드래곤 피어): SkillData(데미지/쿨타임)는
+    존재하나 DragonController.PlayRangedSkillEffect에 케이스가 없어
+    실제로는 아무 효과도 발동하지 않음
+ B. 레벨업/스탯 성장 시스템: userLevel/userExp, dragonLevel 필드는 있지만
+    이 값이 str/agi/intel/maxHp 등 실제 전투 스탯에 전혀 반영되지 않음
+ C. 드래곤 자체 성장: DragonSaveData.dragonStats(str/mana)가 전투 데미지
+    계산에 전혀 연결되어 있지 않음(드래곤 스킬 데미지는 항상 고정값)
+ D. EventController의 4개 이벤트: 코드상 존재하나 현재 스코프와 맞지 않아
+    실제로 쓰이는지 재검토가 필요함(프로토타입 잔재 가능성)
+
+====================================================================
+ (이 문서는 코드 조사를 기반으로 자동 생성되었으며, 실제 기획 의도와 다를
+  수 있는 부분은 위 "공백" 항목에 별도로 표시해두었습니다.)
+====================================================================
